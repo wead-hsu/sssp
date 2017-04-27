@@ -116,7 +116,7 @@ class SemiClassifier(ModelBase):
     def _create_decoder(self, inp, seqlen, init_state, label_oh, scope_name, args):
         with tf.variable_scope(scope_name):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            #emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
+            emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
 
             cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
 
@@ -215,8 +215,7 @@ class SemiClassifier(ModelBase):
                 scope_name='enc',
                 args=args)
 
-        #label_oh = tf.gather(tf.eye(args.num_classes), label)
-        """
+        label_oh = tf.gather(tf.eye(args.num_classes), label)
         with tf.variable_scope('latent'):
             y_enc_in = tf.contrib.layers.fully_connected(label_oh, args.dim_z, scope='y_enc_in')
             pst_in = tf.concat([y_enc_in, enc_state], axis=1)
@@ -224,8 +223,6 @@ class SemiClassifier(ModelBase):
                     scope='mu_posterior')
             logvar_pst = tf.contrib.layers.fully_connected(pst_in, args.dim_z, tf.nn.tanh,
                     scope='logvar_posterior')
-            #mu_pri = tf.contrib.layers.fully_connected(label_oh, args.dim_z, scope='mu_prior')
-            #logvar_pri = tf.contrib.layers.fully_connected(label_oh, args.dim_z, scope='logvar_prior')
             mu_pri = tf.zeros_like(mu_pst)
             logvar_pri = tf.ones_like(logvar_pst)
             dist_pri = tf.contrib.distributions.Normal(mu=mu_pri, sigma=tf.exp(logvar_pri))
@@ -239,13 +236,12 @@ class SemiClassifier(ModelBase):
             z = smart_cond(self.is_training, lambda: z_st_pst, lambda: z_st_pri)
        
         z_ext = tf.contrib.layers.fully_connected(tf.reshape(z, [-1, args.dim_z]), args.num_units, scope='extend_z')
-        """
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         outs, proj, dec_func, cell  = self._create_decoder(
                 inp,
                 seqlen=xlen,
-                label_oh=label,
-                init_state=enc_state,
+                label_oh=label_oh,
+                init_state=z_ext,
                 scope_name='dec',
                 args=args)
 
@@ -258,7 +254,6 @@ class SemiClassifier(ModelBase):
                 scope_name='loss',
                 args=args)
         
-        kl_loss = tf.zeros_like(recons_loss)
         return recons_loss, kl_loss
     
     def get_loss_l(self, args):
@@ -396,10 +391,6 @@ class SemiClassifier(ModelBase):
                     ['loss_u', self.loss_u],
                     ['train_u', self.train_unlabel],
                     ['klw', self.kl_w]]
-            """
-            fetch_dict = [['acc_l', self.accuracy_l],
-                    ['pred_l',  self.predict_loss_l]]
-            """
 
             feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, True]])
             fetch = [self.merged] + [t[1] for t in fetch_dict] + [self.train_op]
@@ -409,7 +400,7 @@ class SemiClassifier(ModelBase):
         else:
             fetch_dict = [['pred_l', self.predict_loss_l],
                     ['acc_l', self.accuracy_l],]
-            feed_dict = dict(list(zip(plhs[:4], inps[:4])) + [[self.is_training, False]])
+            feed_dict = dict(list(zip(plhs, inps+inps[:-1])) + [[self.is_training, False]])
             fetch = [self.merged] + [t[1] for t in fetch_dict]
             res = sess.run(fetch, feed_dict)
             res_dict = dict([[fetch_dict[i][0], res[i+1]] for i in range(len(fetch_dict))])
@@ -449,36 +440,3 @@ class SemiClassifier(ModelBase):
         label = np.asarray(label).flatten()
 
         return inp + (label,)
-
-    def encode(self, sess, sent, mask):
-        feed_dict = {self.cur_tgt_plh: sent, self.cur_msk_plh: mask}
-        encoding = sess.run([self.enc_state], feed_dict)
-        return encoding
-
-    def decode_cur_by_vec(self, sess, sent_vec, beam_size):
-        feed_dict = {self.yz: sent_vec, self.beam_size_plh: beam_size}
-        fetch = [self.beam_output_cur, self.beam_scores_cur]
-        beam_output, beam_scores = sess.run(fetch, feed_dict)
-        return beam_output, beam_scores
-
-    def decode_cur_by_sent(self, sess, sent, mask, label, beam_size):
-        assert len(sent) == 1, 'Only one sentence can be fed'
-
-        feed_dict = {self.cur_tgt_plh: sent,
-                self.cur_msk_plh: mask,
-                self.beam_size_plh: beam_size,
-                self.label_plh: label,
-                self.is_training: True}
-        fetch = [self.beam_output_cur, self.beam_scores_cur]
-        beam_output, beam_scores = sess.run(fetch, feed_dict)
-        return beam_output, beam_scores
-
-    def decode_cur_by_label(self, sess, label, beam_size):
-        feed_dict = {self.label_plh: label,
-                self.cur_tgt_plh: [[1, 2, 3]],
-                self.cur_msk_plh: [[1., 1., 1.]],
-                self.beam_size_plh: beam_size,
-                self.is_training: False}
-        fetch = [self.beam_output_cur, self.beam_scores_cur]
-        beam_output, beam_scores = sess.run(fetch, feed_dict)
-        return beam_output, beam_scores
