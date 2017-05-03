@@ -203,10 +203,9 @@ class SemiClassifier(ModelBase):
                 return llh_train
     
             loss = smart_cond(self.is_training, get_llh_train, get_llh_test)
-            #loss = get_llh_test()
         return loss
 
-    def _get_elbo_label(self, inp, tgt, msk, label, args):
+    def _get_elbo_label(self, inp, tgt, msk, label_oh, args):
         """ Build encoder and decoders """
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         enc_state = self._create_encoder(
@@ -215,7 +214,6 @@ class SemiClassifier(ModelBase):
                 scope_name='enc',
                 args=args)
 
-        label_oh = tf.gather(tf.eye(args.num_classes), label)
         with tf.variable_scope('latent'):
             y_enc_in = tf.contrib.layers.fully_connected(label_oh, args.dim_z, scope='y_enc_in')
             pst_in = tf.concat([y_enc_in, enc_state], axis=1)
@@ -262,7 +260,7 @@ class SemiClassifier(ModelBase):
             self.recons_loss_l, self.kl_loss_l = self._get_elbo_label(self.inp_l_plh,
                     self.tgt_l_plh,
                     self.msk_l_plh,
-                    self.label_plh,
+                    tf.gather(tf.eye(args.num_classes), self.label_plh),
                     args)
             self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
             self.ppl_l = tf.exp(self.recons_loss_l)
@@ -292,20 +290,6 @@ class SemiClassifier(ModelBase):
     
     def get_loss_u(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
-            """ unlabel CVAE """
-            self.recons_loss_u, self.kl_loss_u, self.loss_sum_u = [], [], []
-            for idx in range(args.num_classes):
-                label_i = tf.constant(idx)
-                label_i = tf.tile([idx], [tf.shape(self.tgt_u_plh)[0]])
-                recons_loss_ui, kl_loss_ui = self._get_elbo_label(self.inp_u_plh,
-                        self.tgt_u_plh,
-                        self.msk_u_plh,
-                        label_i, 
-                        args)
-                self.recons_loss_u.append(recons_loss_ui)
-                self.kl_loss_u.append(kl_loss_ui)
-                self.loss_sum_u.append(recons_loss_ui + kl_loss_ui * self.kl_w)
-            
             """ unlabel CLASSIFICATION """
             self.logits_u = self._create_rnn_classifier(self.tgt_u_plh,
                     tf.to_int32(tf.reduce_sum(self.msk_u_plh, axis=1)),
@@ -314,9 +298,18 @@ class SemiClassifier(ModelBase):
             self.predict_u = tf.nn.softmax(self.logits_u)
             self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
 
-            self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
-            self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)
-        return self.loss_sum_u + self.entropy_u
+            """ unlabel CVAE """
+            self.recons_loss_u, self.kl_loss_u = self._get_elbo_label(self.inp_u_plh,
+                    self.tgt_u_plh,
+                    self.msk_u_plh,
+                    self.predict_u,
+                    args)
+            self.recons_loss_u = tf.reduce_mean(self.recons_loss_u)
+            self.ppl_u = tf.exp(self.recons_loss_u)
+            self.kl_loss_u = tf.reduce_mean(self.kl_loss_u)
+            self.elbo_loss_u = self.recons_loss_u + self.kl_loss_u * self.kl_w
+
+        return self.elbo_loss_u + self.entropy_u
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):

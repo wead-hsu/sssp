@@ -84,7 +84,7 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
 def main():
     # load all args for the experiment
     args = utils.load_argparse_args(conf_dirs=conf_dirs)
-    explogger = exp_logging.ExpLogging(args.log_prefix, args.log_dir)
+    explogger = exp_logging.ExpLogging(args.log_prefix, args.save_dir)
     wargs = vars(args)
     wargs['conf_dirs'] = conf_dirs
     explogger.write_args(wargs)
