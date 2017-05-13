@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 UNK_TOKEN = 'UNK'
 EOS_TOKEN = 'EOS'
 
+np.random.seed(0)
+
 def build_vocab(word_cnt, cnt_threshold=0, max_vocab_size=0):
 
     """ Build vocabulary from a single file.
@@ -139,7 +141,91 @@ def proc_casetypeclf(ifn, logfn='log'):
     save_data(dev, vocab, classname_to_id, '../case_type_clf/proc/dev.data.idx')
     save_data(test, vocab, classname_to_id, '../case_type_clf/proc/test.data.idx')
 
+def proc_beer_for_reg():
+    ifn = '../beer/raw/reviews.aspect1.train.txt'
+    word_cnt = defaultdict(int)
+    with open(ifn, 'r') as f:
+        words = [w  for l in f for w in l.split('\t')[1].split()]
+        word_cnt = Counter(words)
+        vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=20000)
+    with open('../beer/proc/cls_0-aspect_1/vocab.pkl', 'wb') as f:
+        pkl.dump(vocab, f, protocol=2)
+    
+    train_fn = '../beer/raw/reviews.aspect1.train.txt'
+    test_fn = '../beer/raw/reviews.aspect1.heldout.txt'
+    with open(train_fn, 'r') as f:
+        samples = f.read().strip().split('\n')
+    samples = [samples[idx] for idx in np.random.permutation(len(samples))]
+    portion = [0.1, 0.8, 0.1]
+    thresholds = [int(len(samples) * sum(portion[:idx+1])) for idx in range(len(portion))]
+    labeled_data = samples[0: thresholds[0]]
+    unlabeled_data = samples[thresholds[0]: thresholds[1]]
+    dev_data = samples[thresholds[1]: thresholds[2]]
+
+    with open(test_fn, 'r') as f:
+        test_data = f.read().strip().split('\n')
+
+    def save_data(data, ofn, vocab, cid):
+        UNK_ID = vocab.get(UNK_TOKEN)
+        with open(ofn, 'w') as ofh:
+            for l in data:
+                values = [n for n in l.split('\t')[0].split()]
+                words = l.split('\t')[1].split()
+                ids = [str(vocab.get(w, UNK_ID)) for w in words]
+                ofh.write(values[cid] + '\t' + ' '.join(ids) + '\n')
+
+    save_data(samples, '../beer/proc/cls_0-aspect_1/train_all.data.idx', vocab, 0)
+    save_data(labeled_data, '../beer/proc/cls_0-aspect_1/labeled.data.idx', vocab, 0)
+    save_data(unlabeled_data, '../beer/proc/cls_0-aspect_1/unlabeled.data.idx', vocab, 0)
+    save_data(dev_data, '../beer/proc/cls_0-aspect_1/dev.data.idx', vocab, 0)
+    save_data(test_data, '../beer/proc/cls_0-aspect_1/test.data.idx', vocab, 0)
+
+def proc_beer_for_clf():
+    ifn = '../beer/raw/reviews.aspect1.train.txt'
+    word_cnt = defaultdict(int)
+    with open(ifn, 'r') as f:
+        words = [w  for l in f for w in l.split('\t')[1].split()]
+        word_cnt = Counter(words)
+        vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=20000)
+    with open('../beer/proc/cls_0-aspect_1/vocab.pkl', 'wb') as f:
+        pkl.dump(vocab, f, protocol=2)
+    
+    train_fn = '../beer/raw/reviews.aspect1.train.txt'
+    test_fn = '../beer/raw/reviews.aspect1.heldout.txt'
+    with open(train_fn, 'r') as f:
+        samples = f.read().strip().split('\n')
+    samples = [samples[idx] for idx in np.random.permutation(len(samples))]
+    portion = [0.2, 0.7, 0.1]
+    thresholds = [int(len(samples) * sum(portion[:idx+1])) for idx in range(len(portion))]
+    labeled_data = samples[0: thresholds[0]]
+    unlabeled_data = samples[thresholds[0]: thresholds[1]]
+    dev_data = samples[thresholds[1]: thresholds[2]]
+
+    with open(test_fn, 'r') as f:
+        test_data = f.read().strip().split('\n')
+
+    def save_data(data, ofn, vocab, cid):
+        UNK_ID = vocab.get(UNK_TOKEN)
+        with open(ofn, 'w') as ofh:
+            for l in data:
+                values = [float(n) for n in l.split('\t')[0].split()]
+                words = l.split('\t')[1].split()
+                ids = [str(vocab.get(w, UNK_ID)) for w in words]
+                if values[cid] <= 0.7:
+                    ofh.write('0\t' + ' '.join(ids) + '\n')
+                elif values[cid] >= 0.8:
+                    ofh.write('1\t' + ' '.join(ids) + '\n')
+                else:
+                    pass
+
+    save_path = '../beer/proc/cls_0-aspect_1-clf-0.2/'
+    save_data(samples, save_path + 'train_all.data.idx', vocab, 0)
+    save_data(labeled_data, save_path + 'labeled.data.idx', vocab, 0)
+    save_data(unlabeled_data, save_path + 'unlabeled.data.idx', vocab, 0)
+    save_data(dev_data, save_path + 'dev.data.idx', vocab, 0)
+    save_data(test_data, save_path + 'test.data.idx', vocab, 0)
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    proc_casetypeclf('../case_type_clf/raw/case_type_clf.csv', 
-            '../case_type_clf/proc/log')
+    #proc_casetypeclf('../case_type_clf/raw/case_type_clf.csv', '../case_type_clf/proc/log')
+    #proc_beer_for_reg()
+    proc_beer_for_clf()
