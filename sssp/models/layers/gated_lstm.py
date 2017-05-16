@@ -46,7 +46,7 @@ class GatedLSTM(object):
             c = tf.transpose(c, [1, 0, 2])
             h = tf.transpose(h, [1, 0, 2])
 
-        return c, h, g
+        return c, h
 
     def zero_state(self, batch_size):
         # (c, h, g)
@@ -59,6 +59,7 @@ class GatedLSTM(object):
         x_t, m_t = inputs
         
         g = tf.matmul(tf.matmul(tf.concat([prev_h, x_t], axis=1), self.W_g) + self.b_g, self.u_g)
+        g = tf.sigmoid(g)
 
         c, h = self._lstm_step((prev_c, prev_h), inputs)
         c = g * c + (1 - g) * prev_c
