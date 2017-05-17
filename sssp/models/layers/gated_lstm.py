@@ -39,14 +39,19 @@ class GatedLSTM(object):
                 elems=[inp, msk],
                 initializer=initial_state,
                 )
-        
-        if return_final:
-            c, h = c[-1],  h[-1]
-        else:
-            c = tf.transpose(c, [1, 0, 2])
-            h = tf.transpose(h, [1, 0, 2])
 
-        return c, h
+        if return_final:
+            c = c[-1]
+            h = c[-1]
+            if not time_major:
+                g = tf.transpose(gates, [1, 0, 2])
+        else:
+            if not time_major:
+                c = tf.transpose(c, [1, 0, 2])
+                h = tf.transpose(h, [1, 0, 2])
+                g = tf.transpose(g, [1, 0, 2])
+
+        return c, h, g
 
     def zero_state(self, batch_size):
         # (c, h, g)

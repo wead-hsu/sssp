@@ -62,15 +62,15 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
             if batch_cnt % args.show_every == 0:
                 tb_writer.add_summary(summary, batch_cnt)
                 out_str = res_to_string(average_res(res_list))
-                explogger.message(out_str, True)
+                explogger.message(out_str)
             
             if args.validate_every != -1 and batch_cnt % args.validate_every == 0:
                 out_str = 'VALIDATE:' + validate(valid_dset, model, sess)
-                explogger.message(out_str, True)
+                explogger.message(out_str)
 
             if args.validate_every != -1 and batch_cnt % args.validate_every == 0:
                 out_str = 'TEST:' + validate(test_dset, model, sess)
-                explogger.message(out_str, True)
+                explogger.message(out_str)
 
             if batch_cnt % args.save_every == 0:
                 save_fn = os.path.join(args.save_dir, args.log_prefix)

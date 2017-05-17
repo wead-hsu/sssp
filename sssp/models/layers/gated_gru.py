@@ -46,10 +46,14 @@ class GatedGRU(object):
         
         if return_final:
             states = states[-1]
+            if not time_major:
+                gates = tf.transpose(gates, [1, 0, 2])
         else:
-            states = tf.transpose(states, [1, 0, 2])
+            if not time_major:
+                states = tf.transpose(states, [1, 0, 2])
+                gates = tf.transpose(gates, [1, 0, 2])
 
-        return states
+        return states, gates
 
     def zero_state(self, batch_size):
         return (tf.zeros([batch_size, self.num_units]),
@@ -95,4 +99,4 @@ if __name__ == '__main__':
     res = sess.run(y)
     import numpy as np
     print(res)
-    print(np.shape(res))
+    print(np.shape(res[1]))

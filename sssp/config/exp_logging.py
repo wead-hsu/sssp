@@ -11,6 +11,8 @@ class ExpLogging(object):
             self.log_dir_path = ldir
         if not os.path.exists(self.log_dir_path):
             os.makedirs(self.log_dir_path)
+        else:
+            raise 'Save directory already exists'
 
     def write_args(self, args):
         self.message("-------- Parameter Info --------")
