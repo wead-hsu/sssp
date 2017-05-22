@@ -1,9 +1,3 @@
-"""
-Variational autoencoder based semi-supervised learning for text classification.
-This model is equipped with gate mechanism to determine which part of input text is
-relevant to the classifiation task. The gate information is used in decoder to
-disentangle the signal to reinforce classifier more specifically.
-"""
 from __future__ import division
 from __future__ import print_function
 
@@ -11,16 +5,12 @@ import tensorflow as tf
 from tensorflow.contrib.layers.python.layers.utils import smart_cond
 from tensorflow.core.protobuf import saver_pb2
 from tensorflow.contrib.bayesflow import stochastic_tensor as st
-from tensorflow.python.ops import array_ops
 
 import logging
 import numpy as np
 import pickle as pkl
 from sssp.models.model_base import ModelBase
 from sssp.utils.utils import res_to_string
-from sssp.models.layers.gru import GRU
-from sssp.models.layers.lstm import LSTM
-from sssp.models.layers.gated_lstm import GatedLSTM
 
 logging.basicConfig(level=logging.INFO)
 
@@ -154,57 +144,27 @@ class SemiClassifier(ModelBase):
         return dec_outs, out_proj, dec_step_func, cell
 
     def _create_rnn_classifier(self, inp, msk, scope_name, args):
+        def cal_attention(states, msk):
+            # context is in the layers
+            logits_att = tf.contrib.layers.fully_connected(inputs=states,
+                    num_outputs=args.num_units,
+                    activation_fn=tf.tanh,
+                    scope='attention_0')
+            logits_att = tf.contrib.layers.fully_connected(inputs=logits_att, 
+                    num_outputs=1, 
+                    activation_fn=None,
+                    biases_initializer=None,
+                    scope='attention_1')
+            logits_att = tf.exp(logits_att) * msk[:, :, None]
+            weights = logits_att / tf.reduce_sum(logits_att, axis=1)[:, None, :]
+            return weights
+
         with tf.variable_scope(scope_name):
-            from sssp.models.layers.gated_gru import GatedGRU
-            #print(tf.shape(inp), inp.shape)
-            inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            enc_layer = GatedGRU(inp.shape[2], args.num_units)
-            enc_h, weights = enc_layer.forward(inp, msk, return_final=True)
-            weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
-
-            """
-            seqlen = tf.to_int64(tf.reduce_sum(msk,axis=1))
-            _, enc_state = self._create_encoder(inp, seqlen, 'rnn', args)
+            seqlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
+            states, _ = self._create_encoder(inp, seqlen, 'rnn', args)
+            weights = cal_attention(states, msk)
+            enc_state = tf.reduce_sum(states * weights, axis=1)
             logits = tf.contrib.layers.fully_connected(enc_state, args.num_classes, scope='fc')
-            weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-            """
-
-            """
-            from sssp.models.layers.gated_gru_with_context import GatedGRU
-            inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            def _reverse(input_, seq_lengths, seq_dim, batch_dim):
-                if seq_lengths is not None:
-                    return array_ops.reverse_sequence(
-                        input=input_, seq_lengths=seq_lengths,
-                        seq_dim=seq_dim, batch_dim=batch_dim)
-                else:
-                    return array_ops.reverse(input_, axis=[seq_dim])
-            
-            sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
-            time_dim = 1
-            batch_dim = 0
-            cell_bw = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
-            with tf.variable_scope("bw") as bw_scope:
-              inputs_reverse = _reverse(
-                  inp, seq_lengths=sequence_length,
-                  seq_dim=time_dim, batch_dim=batch_dim)
-              tmp, output_state_bw = tf.nn.dynamic_rnn(
-                  cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
-                  dtype=tf.float32,
-                  scope=bw_scope)
-        
-            output_bw = _reverse(
-                    tmp, seq_lengths=sequence_length,
-                    seq_dim=time_dim, batch_dim=batch_dim)
-        
-            #print(tf.shape(inp), inp.shape)
-            enc_layer = GatedGRU(inp.shape[2], args.num_units, args.num_units)
-            enc_h, weights = enc_layer.forward(inp, output_bw, msk, return_final=True)
-            weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-            logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
-            """
         return logits, tf.squeeze(weights)
 
     def _create_softmax_layer(self, proj, dec_outs, targets, weights, scope_name, args):
@@ -485,7 +445,6 @@ class SemiClassifier(ModelBase):
         label, inp = inp
         
         def proc(sents):
-            #sents = [s[::-1] for s in sents] # CHECK INVERSE GATEDGRU
             sent_lens = [len(s) for s in sents]
             max_sent_len = min(300, max(sent_lens))
             batch_size = len(sents)

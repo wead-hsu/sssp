@@ -224,8 +224,71 @@ def proc_beer_for_clf():
     save_data(unlabeled_data, save_path + 'unlabeled.data.idx', vocab, 0)
     save_data(dev_data, save_path + 'dev.data.idx', vocab, 0)
     save_data(test_data, save_path + 'test.data.idx', vocab, 0)
+
+def proc_agnews():
+    train_fn = '../ag_news/raw/train.csv'
+    test_fn = '../ag_news/raw/test.csv'
+
+    def read_csv(filename):
+        x, y = [], []
+        with open(filename, 'r') as f:
+            cr = csv.reader(f, delimiter=',')
+            for l in cr:
+                x.append(l[2].replace('\\', ' ').lower())
+                y.append(int(l[0])-1)   # [1, n] in raw file
+        return (x, y)
+
+    def split_data(xy, num_classes, portion=0.2):
+        x_c = []
+        y_c = []
+        # 1: n in raw datafile
+        for c in range(num_classes):
+            indices = np.where(np.asarray(xy[1]) == c)[0]
+            x_c.append([xy[0][idx] for idx in indices])
+            y_c.append([xy[1][idx] for idx in indices])
+        
+        train_x, train_y, valid_x, valid_y = [], [], [], []
+
+        num_train_sample = int(len(x_c[0]) * (1 - portion))
+        for idx in range(num_classes):
+            x_ci = x_c[idx]
+            y_ci = y_c[idx]
+            train_x += x_ci[:num_train_sample]
+            train_y += y_ci[:num_train_sample]
+            valid_x += x_ci[num_train_sample:]
+            valid_y += y_ci[num_train_sample:]
+
+        return (train_x, train_y), (valid_x, valid_y)
+
+
+    train_data = read_csv(train_fn)
+    test_data = read_csv(test_fn)
+
+    word_cnt = dict(Counter([w for s in train_data[0] for w in jieba.cut(s)]))
+    vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=20000)
+    train_data, valid_data = split_data(train_data, 4, 0.02)
+    labeled_data, unlabeled_data = split_data(train_data, 4, 0.9)
+
+    def save_data(data, ofn):
+        UNK_ID = vocab[UNK_TOKEN]
+        with open(ofn, 'w') as f:
+            for i in range(len(data[0])):
+                widx = [str(vocab.get(w, UNK_ID)) for w in jieba.cut(data[0][i])]
+                f.write(str(data[1][i]) + '\t')
+                f.write(' '.join(widx) + '\n')
+
+    save_data(train_data, '../ag_news/proc/train_all.data.idx')
+    save_data(labeled_data, '../ag_news/proc/labeled.data.idx')
+    save_data(unlabeled_data, '../ag_news/proc/unlabeled.data.idx')
+    save_data(valid_data, '../ag_news/proc/valid.data.idx')
+    save_data(test_data, '../ag_news/proc/test.data.idx')
+
+    with open('../ag_news/proc/vocab.pkl', 'wb') as f:
+        pkl.dump(vocab, f)
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     #proc_casetypeclf('../case_type_clf/raw/case_type_clf.csv', '../case_type_clf/proc/log')
     #proc_beer_for_reg()
-    proc_beer_for_clf()
+    #proc_beer_for_clf()
+    proc_agnews()

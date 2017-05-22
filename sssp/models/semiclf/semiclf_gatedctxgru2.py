@@ -155,6 +155,7 @@ class SemiClassifier(ModelBase):
 
     def _create_rnn_classifier(self, inp, msk, scope_name, args):
         with tf.variable_scope(scope_name):
+            """
             from sssp.models.layers.gated_gru import GatedGRU
             #print(tf.shape(inp), inp.shape)
             inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
@@ -162,6 +163,7 @@ class SemiClassifier(ModelBase):
             enc_h, weights = enc_layer.forward(inp, msk, return_final=True)
             weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
             logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
+            """
 
             """
             seqlen = tf.to_int64(tf.reduce_sum(msk,axis=1))
@@ -170,8 +172,7 @@ class SemiClassifier(ModelBase):
             weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
             """
 
-            """
-            from sssp.models.layers.gated_gru_with_context import GatedGRU
+            from sssp.models.layers.gated_gru_with_context_2 import GatedGRU
             inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
             def _reverse(input_, seq_lengths, seq_dim, batch_dim):
                 if seq_lengths is not None:
@@ -204,7 +205,7 @@ class SemiClassifier(ModelBase):
             weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
             #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
             logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
-            """
+            
         return logits, tf.squeeze(weights)
 
     def _create_softmax_layer(self, proj, dec_outs, targets, weights, scope_name, args):

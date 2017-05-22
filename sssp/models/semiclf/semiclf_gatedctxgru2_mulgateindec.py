@@ -122,10 +122,12 @@ class SemiClassifier(ModelBase):
 
             return hidden_states, enc_state
 
-    def _create_decoder(self, inp, seqlen, init_state, label_oh, scope_name, args):
+    def _create_decoder(self, inp, seqlen, init_state, label_oh, weights, scope_name, args):
         with tf.variable_scope(scope_name):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
+            label_oh = tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])
+            label_oh = label_oh * tf.stop_gradient(weights[:, None])
+            emb_inp = tf.concat([emb_inp,], axis=2)
 
             cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
 
@@ -155,6 +157,7 @@ class SemiClassifier(ModelBase):
 
     def _create_rnn_classifier(self, inp, msk, scope_name, args):
         with tf.variable_scope(scope_name):
+            """
             from sssp.models.layers.gated_gru import GatedGRU
             #print(tf.shape(inp), inp.shape)
             inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
@@ -162,6 +165,7 @@ class SemiClassifier(ModelBase):
             enc_h, weights = enc_layer.forward(inp, msk, return_final=True)
             weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
             logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
+            """
 
             """
             seqlen = tf.to_int64(tf.reduce_sum(msk,axis=1))
@@ -170,8 +174,7 @@ class SemiClassifier(ModelBase):
             weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
             """
 
-            """
-            from sssp.models.layers.gated_gru_with_context import GatedGRU
+            from sssp.models.layers.gated_gru_with_context_2 import GatedGRU
             inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
             def _reverse(input_, seq_lengths, seq_dim, batch_dim):
                 if seq_lengths is not None:
@@ -204,7 +207,7 @@ class SemiClassifier(ModelBase):
             weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
             #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
             logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
-            """
+            
         return logits, tf.squeeze(weights)
 
     def _create_softmax_layer(self, proj, dec_outs, targets, weights, scope_name, args):
@@ -263,7 +266,7 @@ class SemiClassifier(ModelBase):
             loss = smart_cond(self.is_training, get_llh_train, get_llh_test)
         return loss
 
-    def _get_elbo_label(self, inp, tgt, msk, label, args):
+    def _get_elbo_label(self, inp, tgt, msk, label, weights, args):
         """ Build encoder and decoders """
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         _, enc_state = self._create_encoder(
@@ -298,6 +301,7 @@ class SemiClassifier(ModelBase):
                 inp,
                 seqlen=xlen,
                 label_oh=label_oh,
+                weights=weights,
                 init_state=z_ext,
                 scope_name='dec',
                 args=args)
@@ -332,6 +336,7 @@ class SemiClassifier(ModelBase):
                     self.tgt_l_plh,
                     self.msk_l_plh,
                     self.label_plh,
+                    self.weights_l,
                     args)
             self.recons_loss_l = tf.reduce_sum(self.recons_loss_l * tf.stop_gradient(self.weights_l), axis=1)
             self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
@@ -369,6 +374,7 @@ class SemiClassifier(ModelBase):
                         self.tgt_u_plh,
                         self.msk_u_plh,
                         label_i, 
+                        self.weights_u,
                         args)
                 recons_loss_ui = tf.reduce_sum(recons_loss_ui * tf.stop_gradient(self.weights_u), axis=1)
                 recons_loss_ui = tf.reduce_mean(recons_loss_ui)
