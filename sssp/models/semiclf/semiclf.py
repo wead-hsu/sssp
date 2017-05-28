@@ -84,6 +84,15 @@ class SemiClassifier(ModelBase):
                 shape=[None],
                 name='label')
 
+        self.keep_prob = tf.placeholder(
+                dtype=tf.float32,
+                shape=[],
+                name='keep_prob')
+
+        self.keep_prob0 = tf.placeholder(
+                dtype=tf.float32,
+                shape=[],
+                name='keep_prob')
     def _create_embedding_matrix(self, args):
         if args.embd_path is None:
             np.random.seed(1234567890)
@@ -107,7 +116,7 @@ class SemiClassifier(ModelBase):
             cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
             _, enc_state = tf.nn.dynamic_rnn(
                     cell=cell,
-                    inputs=emb_inp,
+                    inputs=tf.nn.dropout(emb_inp, self.keep_prob),
                     dtype=tf.float32,
                     sequence_length=seqlen)
 
@@ -147,6 +156,9 @@ class SemiClassifier(ModelBase):
     def _create_rnn_classifier(self, inp, seqlen, scope_name, args):
         with tf.variable_scope(scope_name):
             enc_state = self._create_encoder(inp, seqlen, 'rnn', args)
+            enc_state = tf.contrib.layers.fully_connected(enc_state, 30, scope='fc0')
+            enc_state = tf.nn.softmax(enc_state)
+            enc_state = tf.nn.dropout(enc_state, self.keep_prob0)
             logits = tf.contrib.layers.fully_connected(enc_state, args.num_classes, scope='fc')
         return logits
 
@@ -235,7 +247,8 @@ class SemiClassifier(ModelBase):
             z_st_pst = st.StochasticTensor(dist_pst, name='z_pst')
             z = smart_cond(self.is_training, lambda: z_st_pst, lambda: z_st_pri)
        
-        z_ext = tf.contrib.layers.fully_connected(tf.reshape(z, [-1, args.dim_z]), args.num_units, scope='extend_z')
+        cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+        z_ext = tf.contrib.layers.fully_connected(tf.reshape(z, [-1, args.dim_z]), cell.state_size, scope='extend_z')
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         outs, proj, dec_func, cell  = self._create_decoder(
                 inp,
@@ -392,15 +405,17 @@ class SemiClassifier(ModelBase):
                     ['train_u', self.train_unlabel],
                     ['klw', self.kl_w]]
 
-            feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, True]])
+            feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, True], [self.keep_prob,
+                0.2], [self.keep_prob0, 0.5]])
             fetch = [self.merged] + [t[1] for t in fetch_dict] + [self.train_op]
             res = sess.run(fetch, feed_dict)
             res_dict = dict([[fetch_dict[i][0], res[i+1]] for i in range(len(fetch_dict))])
             res_str = res_to_string(res_dict)
         else:
             fetch_dict = [['pred_l', self.predict_loss_l],
-                    ['acc_l', self.accuracy_l],]
-            feed_dict = dict(list(zip(plhs, inps+inps[:-1])) + [[self.is_training, False]])
+                   ['acc_l', self.accuracy_l],]
+            feed_dict = dict(list(zip(plhs, inps+inps[:-1])) + [[self.is_training, False],
+                [self.keep_prob, 1.0], [self.keep_prob0, 1.0]])
             fetch = [self.merged] + [t[1] for t in fetch_dict]
             res = sess.run(fetch, feed_dict)
             res_dict = dict([[fetch_dict[i][0], res[i+1]] for i in range(len(fetch_dict))])
@@ -424,7 +439,7 @@ class SemiClassifier(ModelBase):
         
         def proc(sents):
             sent_lens = [len(s) for s in sents]
-            max_sent_len = min(300, max(sent_lens))
+            max_sent_len = min(100, max(sent_lens))
             batch_size = len(sents)
             inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
             tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')

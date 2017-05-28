@@ -1,7 +1,7 @@
 import tensorflow as tf
 
-class GatedGRU(object):
-    def __init__(self, inp_size, num_units):
+class GatedGRU(tf.contrib.rnn.RNNCell):
+    def __init__(self, inp_size, num_units, scope_name='gated_gru'):
         """
         GRU implemetation. 
         Args:
@@ -14,20 +14,20 @@ class GatedGRU(object):
         xav_init = tf.contrib.layers.xavier_initializer
 
         # parameters
-        self.W_0 = tf.get_variable('W0', shape=[num_units, 2 * num_units], )#initializer=xav_init())
-        self.U_0 = tf.get_variable('U0', shape=[inp_size, 2 * num_units], )#initializer=xav_init())
-        self.b_0 = tf.get_variable('b0', shape=[2 * num_units], initializer=tf.constant_initializer(0.))
-
-        self.W_1 = tf.get_variable('W1', shape=[num_units, num_units], )
-        self.U_1 = tf.get_variable('U1', shape=[inp_size, num_units], )
-        self.b_1 = tf.get_variable('b1', shape=[num_units], initializer=tf.constant_initializer(0.))
-
-        self.W_g = tf.get_variable('W_g', shape=[inp_size + num_units, num_units], )#initializer=xav_init())
-        self.b_g = tf.get_variable('b_g', shape=[num_units], initializer=tf.constant_initializer(0.))
-        self.u_g = tf.get_variable('u_g', shape=[num_units, 1])
-
-
-    def forward(self, inp, msk, initial_state=None, time_major=False, return_final=False, scope='GatedLSTM'):
+        with tf.variable_scope(scope_name):
+            self.W_0 = tf.get_variable('W0', shape=[num_units, 2 * num_units], )#initializer=xav_init())
+            self.U_0 = tf.get_variable('U0', shape=[inp_size, 2 * num_units], )#initializer=xav_init())
+            self.b_0 = tf.get_variable('b0', shape=[2 * num_units], initializer=tf.constant_initializer(0.))
+    
+            self.W_1 = tf.get_variable('W1', shape=[num_units, num_units], )
+            self.U_1 = tf.get_variable('U1', shape=[inp_size, num_units], )
+            self.b_1 = tf.get_variable('b1', shape=[num_units], initializer=tf.constant_initializer(0.))
+    
+            self.W_g = tf.get_variable('W_g', shape=[inp_size + num_units, num_units], )#initializer=xav_init())
+            self.b_g = tf.get_variable('b_g', shape=[num_units], initializer=tf.constant_initializer(0.))
+            self.u_g = tf.get_variable('u_g', shape=[num_units, 1])
+    
+    def forward(self, inp, msk, initial_state=None, time_major=False, return_final=False, scope='GatedGRU'):
         """ to build the graph, run forward """
         if not time_major:
             inp = tf.transpose(inp, [1, 0, 2])
@@ -37,9 +37,9 @@ class GatedGRU(object):
         batch_size = tf.shape(inp)[1]
 
         if initial_state is None:
-            initial_state = self.zero_state(batch_size)
+            initial_state = self.zero_state(batch_size, dtype=tf.float32)
 
-        states, gates = tf.scan(self._gate_step,
+        states, gates = tf.scan(self._mask_step,
                 elems=[inp, msk],
                 initializer=initial_state,
                 )
@@ -55,25 +55,36 @@ class GatedGRU(object):
 
         return states, gates
 
-    def zero_state(self, batch_size):
-        return (tf.zeros([batch_size, self.num_units]),
-                tf.zeros([batch_size, 1]),)
+    def zero_state(self, batch_size, dtype):
+        return (tf.zeros([batch_size, self.num_units], dtype=dtype),
+                tf.zeros([batch_size, 1], dtype=dtype),)
+    
+    @property
+    def state_size(self):
+        return (self.num_units, 1)
 
-    def _gate_step(self, states, inputs):
-        prev_s, prev_g = states
+    @property
+    def output_size(self):
+        return (self.num_units, 1)
+
+    def _mask_step(self, states, inputs):
         x_t, m_t = inputs
+        s, g = self._gate_step(states, x_t)
+        s = tf.where(tf.equal(m_t, 1), s, states[0])
+        return s, g
+
+    def _gate_step(self, states, x_t):
+        prev_s, prev_g = states
         
         g = tf.matmul(tf.matmul(tf.concat([prev_s, x_t], axis=1), self.W_g) + self.b_g, self.u_g)
         g = tf.sigmoid(g)
 
-        s = self._gru_step(prev_s, inputs)
+        s = self._gru_step(prev_s, x_t)
         s = g * s + (1 - g) * prev_s
         
-        s = tf.where(tf.equal(m_t, 1), s, prev_s)
         return s, g
 
-    def _gru_step(self, prev_s, inputs):
-        x_t, m_t = inputs
+    def _gru_step(self, prev_s, x_t):
         z, r = tf.split(tf.matmul(x_t, self.U_0) + tf.matmul(prev_s, self.W_0) + self.b_0,
                 num_or_size_splits=2,
                 axis=1)
@@ -84,6 +95,11 @@ class GatedGRU(object):
         h = tf.tanh(tf.matmul(x_t, self.U_1) + tf.matmul(r * prev_s, self.W_1) + self.b_1)
         s = (1 - z) * h + z * prev_s
         return s
+
+    def __call__(self, inputs, states):
+        """ change order """
+        new_states = self._gate_step(states, inputs)
+        return new_states, new_states
 
 if __name__ == '__main__':
     net = GatedGRU(3,4)
@@ -100,3 +116,15 @@ if __name__ == '__main__':
     import numpy as np
     print(res)
     print(np.shape(res[1]))
+
+
+    a, b = tf.nn.dynamic_rnn(cell=net,
+                        inputs=inp,
+                        dtype=tf.float32,
+                        #initial_state=cell.zero_state(tf.shape(emb_inp)[0], dtype=tf.float32),
+                        sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
+    r0, r1 = sess.run([a, b])
+    for x in r0:
+        print(x.shape)
+    for x in r1:
+        print(x.shape)

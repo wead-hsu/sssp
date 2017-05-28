@@ -44,7 +44,7 @@ class GatedLSTM(object):
             c = c[-1]
             h = c[-1]
             if not time_major:
-                g = tf.transpose(gates, [1, 0, 2])
+                g = tf.transpose(g, [1, 0, 2])
         else:
             if not time_major:
                 c = tf.transpose(c, [1, 0, 2])
