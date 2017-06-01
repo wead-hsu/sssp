@@ -409,27 +409,28 @@ class SemiClassifier(ModelBase):
                 write_version=saver_pb2.SaverDef.V2)  # save all, including word embeddings
         return self.saver
     
-    @staticmethod
-    def prepare_data(inp):
-        inp = [[s.split(' ') for s in l.strip().split('\t')] for l in inp[0]]
-        inp = list(zip(*inp))
-        label, inp = inp
-        
-        def proc(sents):
-            sent_lens = [len(s) for s in sents]
-            max_sent_len = min(100, max(sent_lens))
-            batch_size = len(sents)
-            inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
-            for idx, s in enumerate(sents):
-                len_s = min(max_sent_len, len(s))
-                inp_np[idx][1:len_s+1] = s[:len_s]
-                tgt_np[idx][:len_s] = s[:len_s]
-                msk_np[idx][:len_s+1] = 1
-            return inp_np, tgt_np, msk_np
-        
-        inp = proc(inp)
-        label = np.asarray(label).flatten()
-
-        return inp + (label,)
+    def get_prepare_func(self, args):
+        def prepare_data(raw_inp):
+            raw_inp = [[s.split(' ') for s in l.strip().split('\t')] for l in raw_inp[0]]
+            raw_inp = list(zip(*raw_inp))
+            label, inp = raw_inp
+            
+            def proc(sents):
+                sent_lens = [len(s) for s in sents]
+                max_sent_len = min(args.max_sent_len, max(sent_lens))
+                batch_size = len(sents)
+                inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
+                tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
+                msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
+                for idx, s in enumerate(sents):
+                    len_s = min(max_sent_len, len(s))
+                    inp_np[idx][1:len_s+1] = s[:len_s]
+                    tgt_np[idx][:len_s] = s[:len_s]
+                    msk_np[idx][:len_s+1] = 1
+                return inp_np, tgt_np, msk_np
+            
+            inp = proc(inp)
+            label = np.asarray(label).flatten().astype('int32')
+            #print(inp + (label,))
+            return inp + (label,)
+        return prepare_data

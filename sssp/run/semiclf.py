@@ -2,17 +2,17 @@ import sys
 import os
 import time
 from sssp.utils import utils
-from sssp.config import exp_logging
+from sssp.config import exp_logger
 from sssp.io.datasets import initDataset
 #from sssp.io.batch_iterator import threaded_generator
 from sssp.utils.utils import average_res, res_to_string
 import tensorflow as tf
 import logging
 
-#logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 # ------------- CHANGE CONFIGURATIONS HERE ---------------
-conf_dirs = ['sssp.config.conf_semiclf_argparse',]
+conf_dirs = ['sssp.config.conf_semiclf_multilabel',]
 # --------------------------------------------------------
 
 def validate(valid_dset, model, sess):
@@ -62,15 +62,15 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
             if batch_cnt % args.show_every == 0:
                 tb_writer.add_summary(summary, batch_cnt)
                 out_str = res_to_string(average_res(res_list))
-                explogger.message(out_str)
+                explogger.message(out_str, True)
             
             if args.validate_every != -1 and batch_cnt % args.validate_every == 0:
                 out_str = 'VALIDATE:' + validate(valid_dset, model, sess)
-                explogger.message(out_str)
+                explogger.message(out_str, True)
 
             if args.validate_every != -1 and batch_cnt % args.validate_every == 0:
                 out_str = 'TEST:' + validate(test_dset, model, sess)
-                explogger.message(out_str)
+                explogger.message(out_str, True)
 
             if batch_cnt % args.save_every == 0:
                 save_fn = os.path.join(args.save_dir, args.log_prefix)
@@ -84,7 +84,7 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
 def main():
     # load all args for the experiment
     args = utils.load_argparse_args(conf_dirs=conf_dirs)
-    explogger = exp_logging.ExpLogging(args.log_prefix, args.save_dir)
+    explogger = exp_logger.ExpLogger(args.log_prefix, args.save_dir)
     wargs = vars(args)
     wargs['conf_dirs'] = conf_dirs
     explogger.write_args(wargs)
@@ -98,10 +98,15 @@ def main():
     explogger.write_variables(vs)
 
     # step 2: init dataset
-    label_dset = initDataset(args.train_label_path, model.prepare_data, args.batch_size_label)
-    unlabel_dset = initDataset(args.train_unlabel_path, model.prepare_data, args.batch_size_unlabel)
-    valid_dset = initDataset(args.valid_path, model.prepare_data, args.batch_size_label)
-    test_dset = initDataset(args.test_path, model.prepare_data, args.batch_size_label)
+    label_dset = initDataset(args.train_label_path, model.get_prepare_func(args), args.batch_size_label)
+    unlabel_dset = initDataset(args.train_unlabel_path, model.get_prepare_func(args), args.batch_size_unlabel)
+    valid_dset = initDataset(args.valid_path, model.get_prepare_func(args), args.batch_size_label)
+    test_dset = initDataset(args.test_path, model.get_prepare_func(args), args.batch_size_label)
+
+    #label_dset = initDataset(args.train_label_path, model.prepare_data, args.batch_size_label)
+    #unlabel_dset = initDataset(args.train_unlabel_path, model.prepare_data, args.batch_size_unlabel)
+    #valid_dset = initDataset(args.valid_path, model.prepare_data, args.batch_size_label)
+    #test_dset = initDataset(args.test_path, model.prepare_data, args.batch_size_label)
 
     # step 3: Init tensorflow
     configproto = tf.ConfigProto()

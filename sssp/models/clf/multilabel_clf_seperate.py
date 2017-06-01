@@ -219,28 +219,3 @@ class MultiLabelClassifier(ModelBase):
 
             return inp + (label,)
         return prepare_data
-
-        raw_inp = [[s.split(' ') for s in l.strip().split('\t')] for l in raw_inp[0]]
-        raw_inp = list(zip(*raw_inp))
-        labels = raw_inp[:15]
-        inp = raw_inp[15]
-        print(len(raw_inp))
-        
-        def proc(sents):
-            sent_lens = [len(s) for s in sents]
-            max_sent_len = max(sent_lens)
-            batch_size = len(sents)
-            inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
-            for idx, s in enumerate(sents):
-                inp_np[idx][1:len(s)+1] = s
-                tgt_np[idx][:len(s)] = s
-                msk_np[idx][:len(s)+1] = 1
-            return inp_np, tgt_np, msk_np
-        
-        inp = proc(inp)
-        inp = (inp[1], inp[2])
-        label = np.asarray(label).flatten()
-
-        return inp + (label,)

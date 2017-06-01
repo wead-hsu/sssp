@@ -14,7 +14,8 @@ logging.basicConfig(level=logging.DEBUG)
 # ------------- CHANGE CONFIGURATIONS HERE ---------------
 #conf_dirs = ['sssp.config.conf_pre_agclf_argparse',]
 #conf_dirs = ['sssp.config.conf_multilabelclf',]
-conf_dirs = ['sssp.config.conf_clf']
+#conf_dirs = ['sssp.config.conf_semiclf_multilabel']
+conf_dirs = ['sssp.config.conf_clf_multilabel']
 # --------------------------------------------------------
 
 def validate(valid_dset, model, sess):

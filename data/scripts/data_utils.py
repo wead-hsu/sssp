@@ -9,6 +9,7 @@ import codecs
 import jieba
 from nltk.tokenize import word_tokenize as wt
 import pandas
+import re
 
 jieba.dt.tmp_dir='/home/wdxu/.tmp/'
 logger = logging.getLogger(__name__)
@@ -289,8 +290,13 @@ def proc_agnews():
     with open('../ag_news/proc/vocab.pkl', 'wb') as f:
         pkl.dump(vocab, f)
 
-def proc_gongshang():
-    data = pandas.read_csv('../gongshang/feature20170515.csv', encoding='utf-8')
+def proc_gongshang_semi():
+    unlabeled_data_fns = ['../gongshang/raw/unlabel/unlabel_data20-50.csv',
+            '../gongshang/raw/unlabel/unlabel_data50-100.csv',
+            '../gongshang/raw/unlabel/unlabel_data100-150.csv']
+
+    data = pandas.read_csv('../gongshang/raw/feature20170515.csv', encoding='utf-8')
+    data = data.iloc[np.random.permutation(len(data))]
     split_portion = [0.83, 0.08, 0.09]
     thresholds = [int(sum(split_portion[0:i]) * data.shape[0]) for i in range(4) ]
     train_df = data[thresholds[0]: thresholds[1]]
@@ -298,8 +304,11 @@ def proc_gongshang():
     test_df = data[thresholds[2]: thresholds[3]]
 
     words = [w for l in list(train_df['Problem']) for w in jieba.cut(l)]
+    for fn in unlabeled_data_fns:
+        words.extend([w for l in open(fn) for w in jieba.cut(l)])
     word_cnt = dict(Counter(words))
-    vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=10000)
+    print('number of unique words: ', len(word_cnt))
+    vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=15000)
     
     def clean_str(string):
         """
@@ -307,6 +316,7 @@ def proc_gongshang():
         Original taken from https://github.com/yoonkim/CNN_sentence/blob/master/process_data.py
         """
         string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+        """
         string = re.sub(r"\'s", " \'s", string)
         string = re.sub(r"\'ve", " \'ve", string)
         string = re.sub(r"n\'t", " n\'t", string)
@@ -319,6 +329,7 @@ def proc_gongshang():
         string = re.sub(r"\)", " \) ", string)
         string = re.sub(r"\?", " \? ", string)
         string = re.sub(r"\s{2,}", " ", string)
+        """
         return string.strip().lower()
     
     keys = ['GetPay', 'AssoPay', 'WorkTime', 'WorkPlace', 'JobRel', 'DiseRel', 'OutForPub',
@@ -331,17 +342,111 @@ def proc_gongshang():
             ys = df[keys]
             for i in range(x.count()):
                 #print(x.iloc[i])
-                words = jieba.cut(x.iloc[i])
+                #words = jieba.cut(clean_str(x.iloc[i]))
+                words = jieba.cut((x.iloc[i]))
                 ids = [str(vocab.get(w, UNK_ID)) for w in words]
                 ys_i = ys.iloc[i].values.tolist()
                 f.write('\t'.join([str(j+1) for j in ys_i]))
-                f.write('\t' + ' '.join(ids) + '\n')
+                f.write('\t' + ' '.join(ids))
+                #f.write('\t' + x.iloc[i])
+                #f.write('\t' + clean_str(x.iloc[i]))
+                f.write('\n')
 
     save_data(train_df, '../gongshang/proc/labeled.data.idx', vocab, keys)
     save_data(valid_df, '../gongshang/proc/valid.data.idx', vocab, keys)
     save_data(test_df, '../gongshang/proc/test.data.idx', vocab, keys)
 
-    with open('../gongshang/vocab.pkl', 'wb') as f:
+    with open('../gongshang/proc/vocab.pkl', 'wb') as f:
+        pkl.dump(vocab, f)
+
+    """ proc unlabeled data """
+    portion = [1600, 1500, 800]
+    portion = [p / sum(portion) for p in portion]
+    num_unlabeled = 3900 * 2
+    unlabeled_samples = []
+    for idx, fn in enumerate(unlabeled_data_fns):
+        with open(fn, 'r') as f:
+            samples_tmp = f.read().strip().split('\n')
+            samples_tmp = [samples_tmp[i] for i in np.random.permutation(len(samples_tmp))]
+            unlabeled_samples.extend(samples_tmp[: int(portion[idx] * num_unlabeled)])
+    unlabeled_samples = [unlabeled_samples[i] for i in np.random.permutation(len(unlabeled_samples))]
+    tot = 0
+    nun = 0
+    with open('../gongshang/proc/unlabeled.data.idx', 'w') as f:
+        UNK_ID = vocab[UNK_TOKEN]
+        for s in unlabeled_samples:
+            f.write('\t'.join(['0'] * 15))
+            f.write('\t')
+            words = [str(vocab.get(w, UNK_ID)) for w in jieba.cut(s)]
+            if len(words) == 0:
+                raise ('empty sentence found')
+            tot += len(words)
+            nun += sum([1 if w == str(UNK_ID) else 0 for w in words])
+            f.write(' '.join(words))
+            f.write('\n')
+    print(tot, nun, nun/tot)
+
+def proc_gongshang_clf():
+    data = pandas.read_csv('../gongshang/raw/feature20170515.csv', encoding='utf-8')
+    data = data.iloc[np.random.permutation(len(data))]
+    split_portion = [0.83, 0.08, 0.09]
+    thresholds = [int(sum(split_portion[0:i]) * data.shape[0]) for i in range(4) ]
+    train_df = data[thresholds[0]: thresholds[1]]
+    valid_df = data[thresholds[1]: thresholds[2]]
+    test_df = data[thresholds[2]: thresholds[3]]
+
+    words = [w for l in list(train_df['Problem']) for w in jieba.cut(l)]
+    word_cnt = dict(Counter(words))
+    print('number of unique words: ', len(word_cnt))
+    vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=15000)
+    
+    def clean_str(string):
+        """
+        Tokenization/string cleaning for all datasets except for SST.
+        Original taken from https://github.com/yoonkim/CNN_sentence/blob/master/process_data.py
+        """
+        string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
+        """
+        string = re.sub(r"\'s", " \'s", string)
+        string = re.sub(r"\'ve", " \'ve", string)
+        string = re.sub(r"n\'t", " n\'t", string)
+        string = re.sub(r"\'re", " \'re", string)
+        string = re.sub(r"\'d", " \'d", string)
+        string = re.sub(r"\'ll", " \'ll", string)
+        string = re.sub(r",", " , ", string)
+        string = re.sub(r"!", " ! ", string)
+        string = re.sub(r"\(", " \( ", string)
+        string = re.sub(r"\)", " \) ", string)
+        string = re.sub(r"\?", " \? ", string)
+        string = re.sub(r"\s{2,}", " ", string)
+        """
+        return string.strip().lower()
+    
+    keys = ['GetPay', 'AssoPay', 'WorkTime', 'WorkPlace', 'JobRel', 'DiseRel', 'OutForPub',
+            'OnOff', 'InjIden', 'EndLabor', 'LaborContr', 'ConfrmLevel', 'Level', 'Insurance', 'HaveMedicalFee']
+
+    def save_data(df, ofn, vocab, keys):
+        UNK_ID = vocab[UNK_TOKEN]
+        with open(ofn, 'w') as f:
+            x = df['Problem']
+            ys = df[keys]
+            for i in range(x.count()):
+                #print(x.iloc[i])
+                #words = jieba.cut(clean_str(x.iloc[i]))
+                words = jieba.cut((x.iloc[i]))
+                ids = [str(vocab.get(w, UNK_ID)) for w in words]
+                ys_i = ys.iloc[i].values.tolist()
+                f.write('\t'.join([str(j+1) for j in ys_i]))
+                f.write('\t' + ' '.join(ids))
+                #f.write('\t' + x.iloc[i])
+                #f.write('\t' + clean_str(x.iloc[i]))
+                f.write('\n')
+
+    save_data(train_df, '../gongshang/clf/labeled.data.idx', vocab, keys)
+    save_data(valid_df, '../gongshang/clf/valid.data.idx', vocab, keys)
+    save_data(test_df, '../gongshang/clf/test.data.idx', vocab, keys)
+
+    with open('../gongshang/clf/vocab.pkl', 'wb') as f:
         pkl.dump(vocab, f)
 
 if __name__ == '__main__':
@@ -350,4 +455,5 @@ if __name__ == '__main__':
     #proc_beer_for_reg()
     #proc_beer_for_clf()
     #proc_agnews()
-    proc_gongshang()
+    proc_gongshang_semi()
+    #proc_gongshang_clf()

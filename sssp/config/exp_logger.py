@@ -61,4 +61,7 @@ class ExpLogger(object):
 
 if __name__ == '__main__':
     explogger = ExpLogger('test', '/home/wdxu/tmp/test_explogger')
-    explogger.write_args({'a': 1, 'b': '2'})
+    explogger.message('1')
+    explogger.message('1', True)
+    print('2')
+    #explogger.write_args({'a': 1, 'b': '2'})
