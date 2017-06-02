@@ -1,13 +1,8 @@
+# original gated_gru_with_context.py
 import tensorflow as tf
 
 class GatedGRU(object):
     def __init__(self, inp_size, context_size, num_units):
-        """
-        GRU implemetation. 
-        Args:
-            inp_size: input_size
-            hidden_size: number of units of hidden variable
-        """
         # intializer
         self.inp_size = inp_size
         self.num_units = num_units
@@ -16,11 +11,11 @@ class GatedGRU(object):
 
         # parameters
         self.W_0 = tf.get_variable('W0', shape=[num_units, 2 * num_units], )#initializer=xav_init())
-        self.U_0 = tf.get_variable('U0', shape=[inp_size, 2 * num_units], )#initializer=xav_init())
+        self.U_0 = tf.get_variable('U0', shape=[inp_size + context_size, 2 * num_units], )#initializer=xav_init())
         self.b_0 = tf.get_variable('b0', shape=[2 * num_units], initializer=tf.constant_initializer(0.))
 
         self.W_1 = tf.get_variable('W1', shape=[num_units, num_units], )
-        self.U_1 = tf.get_variable('U1', shape=[inp_size, num_units], )
+        self.U_1 = tf.get_variable('U1', shape=[inp_size + context_size, num_units], )
         self.b_1 = tf.get_variable('b1', shape=[num_units], initializer=tf.constant_initializer(0.))
 
         self.W_g = tf.get_variable('W_g', shape=[inp_size + num_units + context_size, num_units], )#initializer=xav_init())
@@ -75,7 +70,7 @@ class GatedGRU(object):
 
     def _gru_step(self, prev_s, inputs):
         x_t, b_t, m_t = inputs
-        #x_t = tf.concat([x_t, b_t], axis=1)
+        x_t = tf.concat([x_t, b_t], axis=1)
         z, r = tf.split(tf.matmul(x_t, self.U_0) + tf.matmul(prev_s, self.W_0) + self.b_0,
                 num_or_size_splits=2,
                 axis=1)

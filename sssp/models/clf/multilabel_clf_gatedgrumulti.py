@@ -14,10 +14,13 @@ from sssp.models.layers.gru import GRU
 from sssp.models.layers.lstm import LSTM
 from sssp.models.layers.gated_gru import GatedGRU
 from sssp.models.layers.gated_lstm import GatedLSTM
+from sssp.models.layers.entity_network import EntityNetwork
+from sssp.models.layers.gated_gru_multi import MultiGatedGRUCell
+#from sssp.models.layers.gru_test import GRU
 
-class RnnClassifier(ModelBase):
+class MultiLabelClassifier(ModelBase):
     def __init__(self, args):
-        super(RnnClassifier, self).__init__()
+        super(MultiLabelClassifier, self).__init__()
         self._logger = logging.getLogger(__name__)
        
     def _create_placeholders(self, args):
@@ -30,11 +33,13 @@ class RnnClassifier(ModelBase):
                 dtype=tf.float32,
                 shape=[None, None],
                 name='mask_plh')
-
-        self.label_plh = tf.placeholder(
+        
+        self.labels_plh = []
+        for i in range(args.num_tasks):
+            self.labels_plh.append(tf.placeholder(
                 dtype=tf.int32,
                 shape=[None],
-                name='label_plh')
+                name='label_plh_{}'.format(i)))
 
         self.is_training = tf.placeholder(
                 dtype=tf.bool,
@@ -65,117 +70,112 @@ class RnnClassifier(ModelBase):
                 cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
-                _, enc_state = tf.nn.dynamic_rnn(cell=cell,
+                enc_states, final_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         dtype=tf.float32,
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
-                if args.num_layers == 1:
-                    enc_state = enc_state[-1]
-                else:
-                    enc_state = enc_state[-1][-1]
                 weights = tf.zeros(tf.shape(emb_inp)[:2])
             elif args.rnn_type == 'GRU':
                 cell = tf.contrib.rnn.GRUCell(args.num_units)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
-                _, enc_state = tf.nn.dynamic_rnn(cell=cell,
+                enc_states, final_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         dtype=tf.float32,
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 weights = tf.zeros(tf.shape(emb_inp)[:2])
             elif args.rnn_type == 'GatedGRU':
-                """
-                enc_layer = GatedGRU(emb_inp.shape[2], args.num_units)
-                enc_state, weights = enc_layer.forward(emb_inp, msk, return_final=True)
-                """
                 cell = GatedGRU(emb_inp.shape[2], args.num_units)
-                enc_states, enc_state = tf.nn.dynamic_rnn(cell=cell,
+                if args.num_layers > 1:
+                    cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
+                enc_states, final_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         dtype=tf.float32,
-                        initial_state=cell.zero_state(tf.shape(emb_inp)[0], dtype=tf.float32),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
-                enc_state = enc_state[0]
-                weights = enc_states[1]
-                self._logger.debug(enc_state.shape)
-                self._logger.debug(weights.shape)
-            elif args.rnn_type == 'GatedCtxGRU':
-                from sssp.models.layers.gated_gru_with_context import GatedGRU
-
-                inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-                def _reverse(input_, seq_lengths, seq_dim, batch_dim):
-                    if seq_lengths is not None:
-                        return array_ops.reverse_sequence(
-                            input=input_, seq_lengths=seq_lengths,
-                            seq_dim=seq_dim, batch_dim=batch_dim)
-                    else:
-                        return array_ops.reverse(input_, axis=[seq_dim])
-                
-                sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
-                time_dim = 1
-                batch_dim = 0
-                cell_bw = tf.contrib.rnn.GRUCell(args.num_units)
-                with tf.variable_scope("bw") as bw_scope:
-                  inputs_reverse = _reverse(
-                          inp, seq_lengths=sequence_length,
-                          seq_dim=time_dim, batch_dim=batch_dim)
-                  tmp, output_state_bw = tf.nn.dynamic_rnn(
-                          cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
-                          dtype=tf.float32,
-                          scope=bw_scope)
-            
-                output_bw = _reverse(
-                        tmp, seq_lengths=sequence_length,
-                        seq_dim=time_dim, batch_dim=batch_dim)
-            
-                enc_layer = GatedGRU(inp.shape[2], args.num_units, args.num_units)
-                enc_state, weights = enc_layer.forward(inp, output_bw, msk, return_final=True)
-                weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-                #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
+                enc_states, weights = enc_states
             else:
-                raise 'RNN type {} not supported'.format(args.rnn_type)
+                raise 'Rnn type not supported'
 
             self._logger.info("Encoder done")
-            return enc_state, weights
+            return enc_states, weights
 
+    def _create_classifier(self, inp, msk, args):
+        """
+        enc_states, _ = tf.nn.bidirectional_dynamic_rnn(
+                cell_fw=tf.contrib.rnn.GRUCell(args.num_units/2),
+                cell_bw=tf.contrib.rnn.GRUCell(args.num_units/2),
+                inputs=inp,
+                dtype=tf.float32,
+                sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),)
+        """
+        init = tf.random_normal_initializer(stddev=0.1)
+        key_size = 20
+        mem_size = 100
+        self.keys = [tf.get_variable("key_%d" % i, [key_size], initializer=init) 
+                for i in range(args.num_tasks)]
+        cell = MultiGatedGRUCell(input_size=inp.shape[2],
+                num_units=mem_size,
+                num_tasks=args.num_tasks,
+                key_size=key_size,
+                keys=self.keys)
+        output, final_state = tf.nn.dynamic_rnn(cell=cell,
+                inputs=inp,
+                dtype=tf.float32,
+                sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
+        return final_state
+    
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
             self.init_global_step()
             self._create_placeholders(args)
             self._create_embedding_matrix(args)
-
+            """
             seqlen = tf.to_int32(tf.reduce_sum(self.mask_plh, axis=1))
-            enc_state, _ = self._create_encoder(
+            enc_states, _ = self._create_encoder(
                     inp=self.input_plh,
                     msk=self.mask_plh,
                     keep_rate=args.keep_rate,
                     scope_name='enc_rnn',
                     args=args)
-
-            enc_state = tf.contrib.layers.fully_connected(enc_state, 30, scope='fc0')
-            enc_state = tf.nn.softmax(enc_state)
-            enc_state = tf.nn.dropout(enc_state, tf.where(self.is_training, 0.5, 1.0))
-
-            logits = tf.contrib.layers.fully_connected(
-                    inputs=enc_state,
-                    num_outputs=args.num_classes,
+            """
+            states = self._create_classifier(
+                    inp=tf.nn.embedding_lookup(self.embedding_matrix, self.input_plh),
+                    msk=self.mask_plh,
+                    args=args)
+            
+            self.prob_list = []
+            self.accuracy_list = []
+            self.loss_list = []
+            for i in range(args.num_tasks):
+                logits_i = tf.contrib.layers.fully_connected(
+                    inputs=states[i][0],
+                    num_outputs=[int(n) for n in args.num_classes.split(',')][i],
                     activation_fn=None,
-                    scope='fc1')
-
-            self.prob = tf.nn.softmax(logits)
-            self.accuracy = tf.equal(tf.cast(self.label_plh, tf.int64), tf.argmax(logits, axis=1))
-            self.accuracy = tf.reduce_mean(tf.cast(self.accuracy, tf.float32))
-
-            self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    labels=self.label_plh,
-                    logits=logits)
-            self.loss = tf.reduce_mean(self.loss)
+                    scope='fc_task_{}'.format(i))
+                
+                prob = tf.nn.softmax(logits_i)
+                acc = tf.equal(tf.cast(self.labels_plh[i], tf.int64), tf.argmax(logits_i, axis=1))
+                acc = tf.reduce_mean(tf.cast(acc, tf.float32))
+                loss = tf.nn.sparse_softmax_cross_entropy_with_logits(
+                    labels=self.labels_plh[i],
+                    logits=logits_i)
+                loss = tf.reduce_mean(loss)
+                self.prob_list.append(prob)
+                self.accuracy_list.append(acc)
+                self.loss_list.append(loss)
+               
+            self.loss = tf.add_n(self.loss_list) / args.num_tasks
+            self.accuracy = tf.add_n(self.accuracy_list) / args.num_tasks
 
             tf.summary.scalar('loss', self.loss)
 
+            vt = tf.get_collection(key=tf.GraphKeys.TRAINABLE_VARIABLES, scope=args.log_prefix)
+            vs = tf.get_collection(key=tf.GraphKeys.GLOBAL_VARIABLES, scope=args.log_prefix)
             learning_rate = tf.train.exponential_decay(args.learning_rate, self.global_step, 
                     args.decay_steps,
                     args.decay_rate,
                     staircase=True)
+
             self.train_op = self.training_op(self.loss,
                     tf.get_collection(key=tf.GraphKeys.TRAINABLE_VARIABLES, scope=args.log_prefix),
                     grad_clip=args.grad_clip,
@@ -189,14 +189,10 @@ class RnnClassifier(ModelBase):
 
             self.merged = tf.summary.merge_all()
 
-            vt = tf.get_collection(key=tf.GraphKeys.TRAINABLE_VARIABLES, scope=args.log_prefix)
-            vs = tf.get_collection(key=tf.GraphKeys.GLOBAL_VARIABLES, scope=args.log_prefix)
         return vt, vs
 
     def run_batch(self, sess, inps, istrn=True):
-        plhs = [self.input_plh,
-                self.mask_plh,
-                self.label_plh]
+        plhs = [self.input_plh, self.mask_plh] + self.labels_plh
 
         if istrn:
             fetch_dict = [
@@ -238,11 +234,13 @@ class RnnClassifier(ModelBase):
         return self.saver
 
     def get_prepare_func(self, args):
-        def prepare_data(inp):
-            inp = [[s.split(' ') for s in l.strip().split('\t')] for l in inp[0]]
-            inp = list(zip(*inp))
-            label, inp = inp
-             
+        def prepare_data(raw_inp):
+            raw_inp = [[s.split(' ') for s in l.strip().split('\t')] for l in raw_inp[0]]
+            raw_inp = list(zip(*raw_inp))
+            labels = raw_inp[:args.num_tasks]
+            #label = labels[args.task_id]
+            inp = raw_inp[args.num_tasks]
+            
             def proc(sents):
                 sent_lens = [len(s) for s in sents]
                 max_sent_len = min(args.max_sent_len, max(sent_lens))
@@ -258,33 +256,8 @@ class RnnClassifier(ModelBase):
                 return inp_np, tgt_np, msk_np
             
             inp = proc(inp)
-            inp = (inp[1], inp[2])
-            label = np.asarray(label).flatten().astype('int32')
+            inp = [inp[1], inp[2]]
+            labels = [np.asarray(l).flatten().astype('int32') for l in labels]
 
-            return inp + (label,)
+            return inp + labels
         return prepare_data
-
-    @staticmethod
-    def prepare_data(inp):
-        inp = [[s.split(' ') for s in l.strip().split('\t')] for l in inp[0]]
-        inp = list(zip(*inp))
-        label, inp = inp
-        
-        def proc(sents):
-            sent_lens = [len(s) for s in sents]
-            max_sent_len = max(sent_lens)
-            batch_size = len(sents)
-            inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
-            for idx, s in enumerate(sents):
-                inp_np[idx][1:len(s)+1] = s
-                tgt_np[idx][:len(s)] = s
-                msk_np[idx][:len(s)+1] = 1
-            return inp_np, tgt_np, msk_np
-        
-        inp = proc(inp)
-        inp = (inp[1], inp[2])
-        label = np.asarray(label).flatten()
-
-        return inp + (label,)

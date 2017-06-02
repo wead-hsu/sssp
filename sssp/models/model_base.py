@@ -93,9 +93,14 @@ class ModelBase(object):
         # ------------- calc gradients --------------------------
         if grads is None:
             grads = tf.gradients(cost, var_list)
-            grads = [tf.clip_by_value(g, -grad_clip, grad_clip) for g in grads]
-            grads, _ = tf.clip_by_global_norm(grads, max_norm)
-            optimizer = tf.train.AdamOptimizer(learning_rate)
+
+        for i, g in enumerate(grads):
+            if g is None:
+                print('WARNING: {} is not in the graph'.format(var_list[i].name))
+
+        grads = [tf.clip_by_value(g, -grad_clip, grad_clip) for g in grads]
+        grads, _ = tf.clip_by_global_norm(grads, max_norm)
+        optimizer = tf.train.AdamOptimizer(learning_rate)
 
         if not hasattr(self, 'global_step'):
             self.init_global_step()

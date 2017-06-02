@@ -61,7 +61,7 @@ class MultiLabelClassifier(ModelBase):
 
     def _create_encoder(self, inp, msk, keep_rate, scope_name, args):
         with tf.variable_scope(scope_name):
-            from sssp.models.layers.gated_gru_with_context_2 import GatedGRU
+            from sssp.models.layers.gated_gru_with_context import GatedGRU
             inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
             def _reverse(input_, seq_lengths, seq_dim, batch_dim):
                 if seq_lengths is not None:

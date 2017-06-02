@@ -1,9 +1,4 @@
-"""
-Variational autoencoder based semi-supervised learning for text classification.
-This model is equipped with gate mechanism to determine which part of input text is
-relevant to the classifiation task. The gate information is used in decoder to
-disentangle the signal to reinforce classifier more specifically.
-"""
+# multitask framework, single task
 from __future__ import division
 from __future__ import print_function
 
@@ -11,16 +6,15 @@ import tensorflow as tf
 from tensorflow.contrib.layers.python.layers.utils import smart_cond
 from tensorflow.core.protobuf import saver_pb2
 from tensorflow.contrib.bayesflow import stochastic_tensor as st
-from tensorflow.python.ops import array_ops
+from tensorflow.contrib.bayesflow import stochastic_graph as sg
+from tensorflow.contrib.bayesflow import stochastic_gradient_estimators as sge
+#from tensorflow.python.framework import ops
 
 import logging
 import numpy as np
 import pickle as pkl
 from sssp.models.model_base import ModelBase
 from sssp.utils.utils import res_to_string
-from sssp.models.layers.gru import GRU
-from sssp.models.layers.lstm import LSTM
-from sssp.models.layers.gated_lstm import GatedLSTM
 
 logging.basicConfig(level=logging.INFO)
 
@@ -114,13 +108,13 @@ class SemiClassifier(ModelBase):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
 
             cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
-            hidden_states, enc_state = tf.nn.dynamic_rnn(
+            _, enc_state = tf.nn.dynamic_rnn(
                     cell=cell,
                     inputs=emb_inp,
                     dtype=tf.float32,
                     sequence_length=seqlen)
 
-            return hidden_states, enc_state
+            return enc_state
 
     def _create_decoder(self, inp, seqlen, init_state, label_oh, scope_name, args):
         with tf.variable_scope(scope_name):
@@ -153,59 +147,13 @@ class SemiClassifier(ModelBase):
 
         return dec_outs, out_proj, dec_step_func, cell
 
-    def _create_rnn_classifier(self, inp, msk, scope_name, args):
+    def _create_rnn_classifier(self, inp, seqlen, scope_name, args):
         with tf.variable_scope(scope_name):
-            from sssp.models.layers.gated_gru import GatedGRU
-            #print(tf.shape(inp), inp.shape)
-            inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            enc_layer = GatedGRU(inp.shape[2], args.num_units)
-            enc_h, weights = enc_layer.forward(inp, msk, return_final=True)
-            weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
-
-            """
-            seqlen = tf.to_int64(tf.reduce_sum(msk,axis=1))
-            _, enc_state = self._create_encoder(inp, seqlen, 'rnn', args)
-            logits = tf.contrib.layers.fully_connected(enc_state, args.num_classes, scope='fc')
-            weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-            """
-
-            """
-            from sssp.models.layers.gated_gru_with_context import GatedGRU
-            inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            def _reverse(input_, seq_lengths, seq_dim, batch_dim):
-                if seq_lengths is not None:
-                    return array_ops.reverse_sequence(
-                        input=input_, seq_lengths=seq_lengths,
-                        seq_dim=seq_dim, batch_dim=batch_dim)
-                else:
-                    return array_ops.reverse(input_, axis=[seq_dim])
-            
-            sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
-            time_dim = 1
-            batch_dim = 0
-            cell_bw = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
-            with tf.variable_scope("bw") as bw_scope:
-              inputs_reverse = _reverse(
-                  inp, seq_lengths=sequence_length,
-                  seq_dim=time_dim, batch_dim=batch_dim)
-              tmp, output_state_bw = tf.nn.dynamic_rnn(
-                  cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
-                  dtype=tf.float32,
-                  scope=bw_scope)
-        
-            output_bw = _reverse(
-                    tmp, seq_lengths=sequence_length,
-                    seq_dim=time_dim, batch_dim=batch_dim)
-        
-            #print(tf.shape(inp), inp.shape)
-            enc_layer = GatedGRU(inp.shape[2], args.num_units, args.num_units)
-            enc_h, weights = enc_layer.forward(inp, output_bw, msk, return_final=True)
-            weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-            logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
-            """
-        return logits, tf.squeeze(weights)
+            enc_state = self._create_encoder(inp, seqlen, 'rnn', args)
+            logits = tf.contrib.layers.fully_connected(inputs=enc_state, 
+                    num_outputs=[int(n) for n in args.num_classes.split(',')][args.task_id],
+                    scope='fc')
+        return logits
 
     def _create_softmax_layer(self, proj, dec_outs, targets, weights, scope_name, args):
         with tf.variable_scope(scope_name):
@@ -221,7 +169,7 @@ class SemiClassifier(ModelBase):
                         logits=logits,
                         targets=targets,
                         weights=weights,
-                        average_across_timesteps=False,
+                        average_across_timesteps=True,
                         average_across_batch=False,
                         softmax_loss_function=None)
                 return llh_precise
@@ -251,7 +199,7 @@ class SemiClassifier(ModelBase):
                             logits=dec_outs,
                             targets=targets,
                             weights=weights,
-                            average_across_timesteps=False,
+                            average_across_timesteps=True,
                             average_across_batch=False,
                             softmax_loss_function=sampled_loss)
                     self._logger.info('Use sampled softmax during training')
@@ -266,13 +214,14 @@ class SemiClassifier(ModelBase):
     def _get_elbo_label(self, inp, tgt, msk, label, args):
         """ Build encoder and decoders """
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
-        _, enc_state = self._create_encoder(
+        enc_state = self._create_encoder(
                 tgt,
                 seqlen=xlen,
                 scope_name='enc',
                 args=args)
 
-        label_oh = tf.gather(tf.eye(args.num_classes), label)
+        num_classes = [int(n) for n in args.num_classes.split(',')][args.task_id]
+        label_oh = tf.gather(tf.eye(num_classes), label)
         with tf.variable_scope('latent'):
             y_enc_in = tf.contrib.layers.fully_connected(label_oh, args.dim_z, scope='y_enc_in')
             pst_in = tf.concat([y_enc_in, enc_state], axis=1)
@@ -315,9 +264,20 @@ class SemiClassifier(ModelBase):
     
     def get_loss_l(self, args):
         with tf.variable_scope(args.log_prefix):
-            """ label CLASSIFICATION """
-            self.logits_l, self.weights_l = self._create_rnn_classifier(self.tgt_l_plh,
+            """ label CVAE """
+            self.recons_loss_l, self.kl_loss_l = self._get_elbo_label(self.inp_l_plh,
+                    self.tgt_l_plh,
                     self.msk_l_plh,
+                    self.label_plh,
+                    args)
+            self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
+            self.ppl_l = tf.exp(self.recons_loss_l)
+            self.kl_loss_l = tf.reduce_mean(self.kl_loss_l)
+            self.elbo_loss_l = self.recons_loss_l + self.kl_loss_l * self.kl_w
+            
+            """ label CLASSIFICATION """
+            self.logits_l = self._create_rnn_classifier(self.tgt_l_plh,
+                    tf.to_int32(tf.reduce_sum(self.msk_l_plh, axis=1)),
                     scope_name='clf',
                     args=args)
             self.predict_loss_l = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -326,19 +286,6 @@ class SemiClassifier(ModelBase):
             self.predict_loss_l = tf.reduce_mean(self.predict_loss_l)
             self.accuracy_l = tf.equal(tf.cast(self.label_plh, tf.int64), tf.argmax(self.logits_l, axis=1))
             self.accuracy_l = tf.reduce_mean(tf.cast(self.accuracy_l, tf.float32))
-
-            """ label CVAE """
-            self.recons_loss_l, self.kl_loss_l = self._get_elbo_label(self.inp_l_plh,
-                    self.tgt_l_plh,
-                    self.msk_l_plh,
-                    self.label_plh,
-                    args)
-            self.recons_loss_l = tf.reduce_sum(self.recons_loss_l * tf.stop_gradient(self.weights_l), axis=1)
-            self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
-            self.ppl_l = tf.exp(self.recons_loss_l)
-            self.kl_loss_l = tf.reduce_mean(self.kl_loss_l)
-            self.elbo_loss_l = self.recons_loss_l + self.kl_loss_l * self.kl_w
-
             self.loss_l = self.elbo_loss_l + self.predict_loss_l * args.alpha
 
             tf.summary.scalar('elbo_loss_l', self.elbo_loss_l)
@@ -352,33 +299,29 @@ class SemiClassifier(ModelBase):
     def get_loss_u(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
             """ unlabel CLASSIFICATION """
-            self.logits_u, self.weights_u = self._create_rnn_classifier(self.tgt_u_plh,
-                    #tf.to_int32(tf.reduce_sum(self.msk_u_plh, axis=1)),
-                    self.msk_u_plh,
+            self.logits_u = self._create_rnn_classifier(self.tgt_u_plh,
+                    tf.to_int32(tf.reduce_sum(self.msk_u_plh, axis=1)),
                     scope_name='clf',
                     args=args)
             self.predict_u = tf.nn.softmax(self.logits_u)
-            self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
 
             """ unlabel CVAE """
-            self.recons_loss_u, self.kl_loss_u, self.loss_sum_u = [], [], []
-            for idx in range(args.num_classes):
-                label_i = tf.constant(idx)
-                label_i = tf.tile([idx], [tf.shape(self.tgt_u_plh)[0]])
-                recons_loss_ui, kl_loss_ui = self._get_elbo_label(self.inp_u_plh,
+            with st.value_type(st.SampleValue(stop_gradient=True)):
+                y_st = st.StochasticTensor(tf.contrib.distributions.Categorical(p=self.predict_u), 
+                        name='dist_y',
+                        loss_fn=sge.get_score_function_with_baseline())
+                recons_loss_u_s, kl_loss_u_s = self._get_elbo_label(self.inp_u_plh,
                         self.tgt_u_plh,
                         self.msk_u_plh,
-                        label_i, 
+                        y_st,
                         args)
-                recons_loss_ui = tf.reduce_sum(recons_loss_ui * tf.stop_gradient(self.weights_u), axis=1)
-                recons_loss_ui = tf.reduce_mean(recons_loss_ui)
-                self.recons_loss_u.append(recons_loss_ui)
-                self.kl_loss_u.append(kl_loss_ui)
-                self.loss_sum_u.append(recons_loss_ui + kl_loss_ui * self.kl_w)
+                routing_loss = recons_loss_u_s + kl_loss_u_s * self.kl_w
 
-            self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
-            self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)
-        return self.loss_sum_u + self.entropy_u
+        with tf.variable_scope(args.log_prefix, reuse=False):
+            surrogate_loss = y_st.loss(routing_loss)
+            self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
+
+        return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(routing_loss) + self.entropy_u
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
@@ -478,28 +421,30 @@ class SemiClassifier(ModelBase):
                 write_version=saver_pb2.SaverDef.V2)  # save all, including word embeddings
         return self.saver
     
-    @staticmethod
-    def prepare_data(inp):
-        inp = [[s.split(' ') for s in l.strip().split('\t')] for l in inp[0]]
-        inp = list(zip(*inp))
-        label, inp = inp
-        
-        def proc(sents):
-            #sents = [s[::-1] for s in sents] # CHECK INVERSE GATEDGRU
-            sent_lens = [len(s) for s in sents]
-            max_sent_len = min(300, max(sent_lens))
-            batch_size = len(sents)
-            inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
-            msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
-            for idx, s in enumerate(sents):
-                len_s = min(max_sent_len, len(s))
-                inp_np[idx][1:len_s+1] = s[:len_s]
-                tgt_np[idx][:len_s] = s[:len_s]
-                msk_np[idx][:len_s+1] = 1
-            return inp_np, tgt_np, msk_np
-        
-        inp = proc(inp)
-        label = np.asarray(label).flatten()
-
-        return inp + (label,)
+    def get_prepare_func(self, args):
+        def prepare_data(raw_inp):
+            raw_inp = [[s.split(' ') for s in l.strip().split('\t')] for l in raw_inp[0]]
+            raw_inp = list(zip(*raw_inp))
+            labels = raw_inp[:args.num_tasks]
+            label = labels[args.task_id]
+            inp = raw_inp[args.num_tasks]
+            
+            def proc(sents):
+                sent_lens = [len(s) for s in sents]
+                max_sent_len = min(args.max_sent_len, max(sent_lens))
+                batch_size = len(sents)
+                inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
+                tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
+                msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
+                for idx, s in enumerate(sents):
+                    len_s = min(max_sent_len, len(s))
+                    inp_np[idx][1:len_s+1] = s[:len_s]
+                    tgt_np[idx][:len_s] = s[:len_s]
+                    msk_np[idx][:len_s+1] = 1
+                return inp_np, tgt_np, msk_np
+            
+            inp = proc(inp)
+            label = np.asarray(label).flatten().astype('int32')
+            #print(inp + (label,))
+            return inp + (label,)
+        return prepare_data

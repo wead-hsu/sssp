@@ -1,3 +1,4 @@
+# skip thought implementation with tensorflow
 from __future__ import division
 from __future__ import print_function
 
@@ -165,10 +166,14 @@ class SemiClassifier(ModelBase):
             weights = cal_attention(states, msk)
             enc_state = tf.reduce_sum(states * weights, axis=1)
             logits = tf.contrib.layers.fully_connected(enc_state, args.num_classes, scope='fc')
+        return logits
 
-        if not args.use_weights:
-            weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-        return logits, tf.squeeze(weights)
+    def _create_rnn_classifier_0(self, inp, msk, scope_name, args):
+        with tf.variable_scope(scope_name):
+            seqlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
+            _, enc_state = self._create_encoder(inp, seqlen, 'rnn', args)
+            logits = tf.contrib.layers.fully_connected(enc_state, args.num_classes, scope='fc')
+        return logits
 
     def _create_softmax_layer(self, proj, dec_outs, targets, weights, scope_name, args):
         with tf.variable_scope(scope_name):
@@ -184,7 +189,7 @@ class SemiClassifier(ModelBase):
                         logits=logits,
                         targets=targets,
                         weights=weights,
-                        average_across_timesteps=False,
+                        average_across_timesteps=True,
                         average_across_batch=False,
                         softmax_loss_function=None)
                 return llh_precise
@@ -214,7 +219,7 @@ class SemiClassifier(ModelBase):
                             logits=dec_outs,
                             targets=targets,
                             weights=weights,
-                            average_across_timesteps=False,
+                            average_across_timesteps=True,
                             average_across_batch=False,
                             softmax_loss_function=sampled_loss)
                     self._logger.info('Use sampled softmax during training')
@@ -278,8 +283,20 @@ class SemiClassifier(ModelBase):
     
     def get_loss_l(self, args):
         with tf.variable_scope(args.log_prefix):
+            """ label CVAE """
+            self.recons_loss_l, self.kl_loss_l = self._get_elbo_label(self.inp_l_plh,
+                    self.tgt_l_plh,
+                    self.msk_l_plh,
+                    self.label_plh,
+                    args)
+            self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
+            self.ppl_l = tf.exp(self.recons_loss_l)
+            self.kl_loss_l = tf.reduce_mean(self.kl_loss_l)
+            self.elbo_loss_l = self.recons_loss_l + self.kl_loss_l * self.kl_w
+            
             """ label CLASSIFICATION """
-            self.logits_l, self.weights_l = self._create_rnn_classifier(self.tgt_l_plh,
+            self.logits_l = self._create_rnn_classifier(self.tgt_l_plh,
+                    #tf.to_int32(tf.reduce_sum(self.msk_l_plh, axis=1)),
                     self.msk_l_plh,
                     scope_name='clf',
                     args=args)
@@ -289,19 +306,6 @@ class SemiClassifier(ModelBase):
             self.predict_loss_l = tf.reduce_mean(self.predict_loss_l)
             self.accuracy_l = tf.equal(tf.cast(self.label_plh, tf.int64), tf.argmax(self.logits_l, axis=1))
             self.accuracy_l = tf.reduce_mean(tf.cast(self.accuracy_l, tf.float32))
-
-            """ label CVAE """
-            self.recons_loss_l, self.kl_loss_l = self._get_elbo_label(self.inp_l_plh,
-                    self.tgt_l_plh,
-                    self.msk_l_plh,
-                    self.label_plh,
-                    args)
-            self.recons_loss_l = tf.reduce_sum(self.recons_loss_l * tf.stop_gradient(self.weights_l), axis=1)
-            self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
-            self.ppl_l = tf.exp(self.recons_loss_l)
-            self.kl_loss_l = tf.reduce_mean(self.kl_loss_l)
-            self.elbo_loss_l = self.recons_loss_l + self.kl_loss_l * self.kl_w
-
             self.loss_l = self.elbo_loss_l + self.predict_loss_l * args.alpha
 
             tf.summary.scalar('elbo_loss_l', self.elbo_loss_l)
@@ -314,15 +318,6 @@ class SemiClassifier(ModelBase):
     
     def get_loss_u(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
-            """ unlabel CLASSIFICATION """
-            self.logits_u, self.weights_u = self._create_rnn_classifier(self.tgt_u_plh,
-                    #tf.to_int32(tf.reduce_sum(self.msk_u_plh, axis=1)),
-                    self.msk_u_plh,
-                    scope_name='clf',
-                    args=args)
-            self.predict_u = tf.nn.softmax(self.logits_u)
-            self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
-
             """ unlabel CVAE """
             self.recons_loss_u, self.kl_loss_u, self.loss_sum_u = [], [], []
             for idx in range(args.num_classes):
@@ -333,11 +328,18 @@ class SemiClassifier(ModelBase):
                         self.msk_u_plh,
                         label_i, 
                         args)
-                recons_loss_ui = tf.reduce_sum(recons_loss_ui * tf.stop_gradient(self.weights_u), axis=1)
-                recons_loss_ui = tf.reduce_mean(recons_loss_ui)
                 self.recons_loss_u.append(recons_loss_ui)
                 self.kl_loss_u.append(kl_loss_ui)
                 self.loss_sum_u.append(recons_loss_ui + kl_loss_ui * self.kl_w)
+            
+            """ unlabel CLASSIFICATION """
+            self.logits_u = self._create_rnn_classifier(self.tgt_u_plh,
+                    #tf.to_int32(tf.reduce_sum(self.msk_u_plh, axis=1)),
+                    self.msk_u_plh,
+                    scope_name='clf',
+                    args=args)
+            self.predict_u = tf.nn.softmax(self.logits_u)
+            self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
 
             self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
             self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)

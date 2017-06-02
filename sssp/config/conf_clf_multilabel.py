@@ -2,12 +2,13 @@ import argparse
 
 def init_arguments(parser):
     # MODEL
-    parser.add_argument('--model_path', type=str, default='sssp.models.clf.multilabel_clf_gatedctxgru2_seperate', help='model_path')
+    parser.add_argument('--model_path', type=str, default='sssp.models.clf.multilabel_clf_gatedgrumulti', help='model_path')
     parser.add_argument('--model_name', type=str, default='MultiLabelClassifier', help='model_name')
     parser.add_argument('--rnn_type', type=str, default='GRU', help='Type of RNN')
-    parser.add_argument('--num_units', type=int, default=512, help='Dimension of hidden state of RNN')
+    parser.add_argument('--num_units', type=int, default=128, help='Dimension of hidden state of RNN')
     parser.add_argument('--batch_size', type=int, default=25, help='batch_size')
     parser.add_argument('--num_layers', type=int, default=1, help='num_layers')
+    parser.add_argument('--use_weights', type=bool, default=True, help='if use, multiply weights in decoder')
     #parser.add_argument('--dim_z', type=int, default=100, help='Dimension of latent code')
     #parser.add_argument('--alpha', type=float, default=1.0, help='rescale for unlabeled clf')
     #parser.add_argument('--num_pretrain_steps', type=int, default=80000, help='Number of step for pretraining')
@@ -22,7 +23,7 @@ def init_arguments(parser):
     parser.add_argument('--learning_rate', type=float, default=0.0004, help='Learning rate')
     parser.add_argument('--show_every', type=int, default=100, help='Number of batch between showing the results')
     parser.add_argument('--save_every', type=int, default=2000, help='Number of batch between saving the results')
-    parser.add_argument('--validate_every', type=int, default=1000, help='Number of batch between validating the results')
+    parser.add_argument('--validate_every', type=int, default=400, help='Number of batch between validating the results')
     parser.add_argument('--decay_rate', type=float, default=0.99, help='decay_rate')
     parser.add_argument('--decay_steps', type=float, default=100, help='decay_steps')
     parser.add_argument('--keep_rate', type=float, default=0.2, help='keep_rate')
@@ -41,7 +42,7 @@ def init_arguments(parser):
         parser.add_argument('--valid_path', type=str, default='data/gongshang/clf/valid.data.idx', help='Directory of datasets')
         parser.add_argument('--test_path', type=str, default='data/gongshang/clf/test.data.idx', help='Directory of datasets')
         parser.add_argument('--vocab_path', type=str, default='data/gongshang/clf/labeled.data.idx', help='vocab_path')
-        parser.add_argument('--save_dir', type=str, default='results/tmp', help='Directory for saving')
+        parser.add_argument('--save_dir', type=str, default='results/clf-gongshang-gatedgrumulti', help='Directory for saving')
         parser.add_argument('--task_id', type=int, default=0, help='task id')
         parser.add_argument('--klw_w', type=float, default=3e-5, help='klw = klw_w * step + klw_b')
         parser.add_argument('--klw_b', type=float, default=3e5, help='klw = klw_w * step + klw_b')

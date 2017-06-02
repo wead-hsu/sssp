@@ -14,6 +14,7 @@ def init_arguments(parser):
     parser.add_argument('--dim_z', type=int, default=100, help='Dimension of latent code')
     parser.add_argument('--alpha', type=float, default=1.0, help='rescale for unlabeled clf')
     parser.add_argument('--num_pretrain_steps', type=int, default=800000, help='Number of step for pretraining')
+    parser.add_argument('--use_weights', type=bool, default=True, help='if use, multiply weights in decoder')
 
     # TRAINING
     parser.add_argument('--max_epoch', type=int, default=400, help='Maximum number of epochs')

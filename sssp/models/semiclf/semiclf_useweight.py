@@ -155,6 +155,54 @@ class SemiClassifier(ModelBase):
 
     def _create_rnn_classifier(self, inp, msk, scope_name, args):
         with tf.variable_scope(scope_name):
+            if args.rnn_type == 'GatedGRU':
+                from sssp.models.layers.gated_gru import GatedGRU
+                inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                enc_layer = GatedGRU(inp.shape[2], args.num_units)
+                enc_h, weights = enc_layer.forward(inp, msk, return_final=True)
+                weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
+            elif args.rnn_type == 'GRU' or args.rnn_type == 'LSTM':
+                seqlen = tf.to_int64(tf.reduce_sum(msk,axis=1))
+                _, enc_h = self._create_encoder(inp, seqlen, 'rnn', args)
+                weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
+            elif args.rnn_type == 'GatedCtxGRU'
+                from sssp.models.layers.gated_gru_with_context import GatedGRU
+
+                inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                def _reverse(input_, seq_lengths, seq_dim, batch_dim):
+                    if seq_lengths is not None:
+                        return array_ops.reverse_sequence(
+                            input=input_, seq_lengths=seq_lengths,
+                            seq_dim=seq_dim, batch_dim=batch_dim)
+                    else:
+                        return array_ops.reverse(input_, axis=[seq_dim])
+                
+                sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
+                time_dim = 1
+                batch_dim = 0
+                cell_bw = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+                with tf.variable_scope("bw") as bw_scope:
+                  inputs_reverse = _reverse(
+                          inp, seq_lengths=sequence_length,
+                          seq_dim=time_dim, batch_dim=batch_dim)
+                  tmp, output_state_bw = tf.nn.dynamic_rnn(
+                          cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
+                          dtype=tf.float32,
+                          scope=bw_scope)
+            
+                output_bw = _reverse(
+                        tmp, seq_lengths=sequence_length,
+                        seq_dim=time_dim, batch_dim=batch_dim)
+            
+                enc_layer = GatedGRU(inp.shape[2], args.num_units, args.num_units)
+                enc_h, weights = enc_layer.forward(inp, output_bw, msk, return_final=True)
+                weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
+            
+            logits = tf.contrib.layers.fully_connected(enc_h, args.num_classes)
+        return logits, tf.squeeze(weights)
+
+    def _create_rnn_classifier_bck(self, inp, msk, scope_name, args):
+        with tf.variable_scope(scope_name):
             """
             from sssp.models.layers.gated_gru import GatedGRU
             #print(tf.shape(inp), inp.shape)
@@ -188,12 +236,12 @@ class SemiClassifier(ModelBase):
             cell_bw = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
             with tf.variable_scope("bw") as bw_scope:
               inputs_reverse = _reverse(
-                  inp, seq_lengths=sequence_length,
-                  seq_dim=time_dim, batch_dim=batch_dim)
+                      inp, seq_lengths=sequence_length,
+                      seq_dim=time_dim, batch_dim=batch_dim)
               tmp, output_state_bw = tf.nn.dynamic_rnn(
-                  cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
-                  dtype=tf.float32,
-                  scope=bw_scope)
+                      cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
+                      dtype=tf.float32,
+                      scope=bw_scope)
         
             output_bw = _reverse(
                     tmp, seq_lengths=sequence_length,
