@@ -51,7 +51,8 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
             batch_l = get_batch(label_dset)
             gen_time = time.time() - t_time
             t_time = time.time()
-            res_dict, res_str, summary = model.run_batch(sess, batch_l+batch_u[:-1], istrn=True)
+            #res_dict, res_str, summary = model.run_batch(sess, batch_l+batch_u[:-args.num_tasks], istrn=True)
+            res_dict, res_str, summary = model.run_batch(sess, batch_l+batch_u[:-len(args.task_ids.split(','))], istrn=True)
             run_time = time.time() - t_time
             res_dict.update({'run_time': run_time})
             res_dict.update({'gen_time': gen_time})

@@ -2,7 +2,7 @@ import argparse
 
 def init_arguments(parser):
     # MODEL
-    parser.add_argument('--model_path', type=str, default='sssp.models.semiclf.semiclf_sample_multilabel_sep', help='model_path')
+    parser.add_argument('--model_path', type=str, default='sssp.models.semiclf.multilabel_semiclf_sample', help='model_path')
     parser.add_argument('--model_name', type=str, default='SemiClassifier', help='model_name')
     parser.add_argument('--rnn_type', type=str, default='GRU', help='Type of RNN')
     parser.add_argument('--num_units', type=int, default=512, help='Dimension of hidden state of RNN')
@@ -47,7 +47,8 @@ def init_arguments(parser):
         #parser.add_argument('--init_from', type=str, default='results/semiclf/semiclf-8000', help='Restore from the trained model path')
         parser.add_argument('--init_from', type=str, default=None, help='Restore from the trained model path')
         parser.add_argument('--num_classes', type=str, default='3,3,5,5,5,5,5,5,5,5,5,5,13,5,5', help='Number of classes')
-        parser.add_argument('--task_id', type=int, default=0, help='task id')
+        #parser.add_argument('--task_id', type=int, default=0, help='task id')
+        parser.add_argument('--task_ids', type=str, default='0', help='task id')
         parser.add_argument('--num_tasks', type=int, default=15, help='number of tasks')
         parser.add_argument('--vocab_size', type=int, default=15000, help='size of vocabulary') # 4291
         parser.add_argument('--embd_path', type=str, default=None, help='size of vocabulary')
