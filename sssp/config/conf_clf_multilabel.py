@@ -2,7 +2,8 @@ import argparse
 
 def init_arguments(parser):
     # MODEL
-    parser.add_argument('--model_path', type=str, default='sssp.models.clf.multilabel_clf_gatedgrumulti', help='model_path')
+    #parser.add_argument('--model_path', type=str, default='sssp.models.clf.multilabel_clf_gatedgrumulti', help='model_path')
+    parser.add_argument('--model_path', type=str, default='sssp.models.clf.multilabel_clf_entitynetwork', help='model_path')
     parser.add_argument('--model_name', type=str, default='MultiLabelClassifier', help='model_name')
     parser.add_argument('--rnn_type', type=str, default='GRU', help='Type of RNN')
     parser.add_argument('--num_units', type=int, default=128, help='Dimension of hidden state of RNN')
@@ -34,7 +35,7 @@ def init_arguments(parser):
     parser.add_argument('--log_prefix', type=str, default='multiclf', help='Log prefix')
 
     # DATASET
-    dataset = 'gongshang' #['beer', 'case']
+    dataset = 'gongshang3k' #['beer', 'case']
     if dataset == 'gongshang':
         parser.add_argument('--train_path', type=str, default='data/gongshang/clf/labeled.data.idx', help='Directory of datasets')
         parser.add_argument('--train_label_path', type=str, default='data/gongshang/clf/labeled.data.idx', help='Directory of datasets')
@@ -53,7 +54,25 @@ def init_arguments(parser):
         parser.add_argument('--vocab_size', type=int, default=4291, help='size of vocabulary')
         parser.add_argument('--embd_path', type=str, default=None, help='size of vocabulary')
         parser.add_argument('--max_sent_len', type=int, default=15, help='maximum sentence length')
-  
+    elif dataset == 'gongshang3k':
+        parser.add_argument('--train_path', type=str, default='data/gongshang/clf3k/labeled.data.idx', help='Directory of datasets')
+        parser.add_argument('--train_label_path', type=str, default='data/gongshang/clf3k/labeled.data.idx', help='Directory of datasets')
+        parser.add_argument('--train_unlabel_path', type=str, default=None, help='Directory of datasets')
+        parser.add_argument('--valid_path', type=str, default='data/gongshang/clf3k/valid.data.idx', help='Directory of datasets')
+        parser.add_argument('--test_path', type=str, default='data/gongshang/clf3k/test.data.idx', help='Directory of datasets')
+        parser.add_argument('--vocab_path', type=str, default='data/gongshang/clf3k/labeled.data.idx', help='vocab_path')
+        parser.add_argument('--save_dir', type=str, default='tmp', help='Directory for saving')
+        parser.add_argument('--task_id', type=int, default=0, help='task id')
+        parser.add_argument('--klw_w', type=float, default=3e-5, help='klw = klw_w * step + klw_b')
+        parser.add_argument('--klw_b', type=float, default=3e5, help='klw = klw_w * step + klw_b')
+        #parser.add_argument('--init_from', type=str, default='results/semiclf/semiclf-8000', help='Restore from the trained model path')
+        parser.add_argument('--init_from', type=str, default=None, help='Restore from the trained model path')
+        parser.add_argument('--num_classes', type=str, default='3,3,5,5,5,5,5,5,5,5,5,5,13,5,5', help='Number of classes')
+        parser.add_argument('--num_tasks', type=int, default=15, help='number of tasks')
+        parser.add_argument('--vocab_size', type=int, default=7039, help='size of vocabulary')
+        parser.add_argument('--embd_path', type=str, default=None, help='size of vocabulary')
+        parser.add_argument('--max_sent_len', type=int, default=15, help='maximum sentence length')
+ 
     """
     if dataset == 'case':
         parser.add_argument('--train_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')

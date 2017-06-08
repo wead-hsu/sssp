@@ -77,7 +77,7 @@ class GatedGRU(tf.contrib.rnn.RNNCell):
         prev_s, prev_g = states
         
         g = tf.matmul(tf.matmul(tf.concat([prev_s, x_t], axis=1), self.W_g) + self.b_g, self.u_g)
-        g = tf.sigmoid(g)
+        g = tf.sigmoid(g+1)
 
         s = self._gru_step(prev_s, x_t)
         s = g * s + (1 - g) * prev_s

@@ -4,6 +4,7 @@ from __future__ import print_function
 import tensorflow as tf
 from tensorflow.contrib.layers.python.layers.utils import smart_cond
 from tensorflow.core.protobuf import saver_pb2
+from tensorflow.python.ops import array_ops
 
 import logging
 import numpy as np
@@ -12,7 +13,6 @@ from sssp.models.model_base import ModelBase
 from sssp.utils.utils import res_to_string
 from sssp.models.layers.gru import GRU
 from sssp.models.layers.lstm import LSTM
-from sssp.models.layers.gated_gru import GatedGRU
 from sssp.models.layers.gated_lstm import GatedLSTM
 
 class RnnClassifier(ModelBase):
@@ -84,10 +84,12 @@ class RnnClassifier(ModelBase):
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 weights = tf.zeros(tf.shape(emb_inp)[:2])
             elif args.rnn_type == 'GatedGRU':
+                from sssp.models.layers.gated_gru import GatedGRU
                 """
                 enc_layer = GatedGRU(emb_inp.shape[2], args.num_units)
                 enc_state, weights = enc_layer.forward(emb_inp, msk, return_final=True)
                 """
+                print(GatedGRU)
                 cell = GatedGRU(emb_inp.shape[2], args.num_units)
                 enc_states, enc_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
@@ -96,6 +98,7 @@ class RnnClassifier(ModelBase):
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 enc_state = enc_state[0]
                 weights = enc_states[1]
+                self.weights = weights
                 self._logger.debug(enc_state.shape)
                 self._logger.debug(weights.shape)
             elif args.rnn_type == 'GatedCtxGRU':
@@ -129,8 +132,24 @@ class RnnClassifier(ModelBase):
             
                 enc_layer = GatedGRU(inp.shape[2], args.num_units, args.num_units)
                 enc_state, weights = enc_layer.forward(inp, output_bw, msk, return_final=True)
+                self.weights = weights
                 weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
                 #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
+            elif args.rnn_type == 'tagGatedGRU':
+                from sssp.models.layers.gated_gru_with_context import GatedGRU
+                sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
+                cell_tag = tf.contrib.rnn.GRUCell(args.num_units)
+                with tf.variable_scope("tagrnn") as scope:
+                    outputs, final_state = tf.nn.dynamic_rnn(
+                            cell=cell_tag, inputs=emb_inp, sequence_length=sequence_length,
+                            dtype=tf.float32,
+                            scope=scope)
+                
+                #inp = tf.concat([emb_inp, outputs], axis=2)
+                gatedctxgru_layer = GatedGRU(emb_inp.shape[2], args.num_units, args.num_units)
+                enc_state, weights = gatedctxgru_layer.forward(emb_inp, outputs, msk, return_final=True)
+                self.weights = weights
+                weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
             else:
                 raise 'RNN type {} not supported'.format(args.rnn_type)
 

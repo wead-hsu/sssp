@@ -2,7 +2,7 @@ import sys
 import os
 import time
 from sssp.utils import utils
-from sssp.config import exp_logging
+from sssp.config import exp_logger
 from sssp.io.datasets import initDataset
 #from sssp.io.batch_iterator import threaded_generator
 from sssp.utils.utils import average_res, res_to_string
@@ -13,7 +13,8 @@ import pickle as pkl
 #logging.basicConfig(level=logging.INFO)
 
 # ------------- CHANGE CONFIGURATIONS HERE ---------------
-conf_dirs = ['sssp.config.conf_semiclf_argparse',]
+#conf_dirs = ['sssp.config.conf_semiclf_argparse',]
+conf_dirs = ['sssp.config.conf_clf']
 # --------------------------------------------------------
 
 def validate(valid_dset, model, sess):
@@ -108,7 +109,7 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
 def main():
     # load all args for the experiment
     args = utils.load_argparse_args(conf_dirs=conf_dirs)
-    explogger = exp_logging.ExpLogging(args.log_prefix, 'results/vis')
+    explogger = exp_logger.ExpLogger(args.log_prefix, 'results/vis')
     wargs = vars(args)
     wargs['conf_dirs'] = conf_dirs
     explogger.write_args(wargs)
@@ -132,8 +133,8 @@ def main():
     configproto.gpu_options.allow_growth = True
     configproto.allow_soft_placement = True
     with tf.Session(config=configproto) as sess:
-        init_from = 'results/semiclf-gatedctxgru-all/semiclf-66000'
-        model.saver.restore(sess, init_from)
+        #init_from = 'results/zhongao/taggatedgru-hasnan/Code_Zasd_ybsd/rnn_test-4000'
+        model.saver.restore(sess, args.init_from)
         explogger.message('Model restored from {0}'.format(init_from))
 
         run(args, 

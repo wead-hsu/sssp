@@ -24,13 +24,16 @@ def create_logger(logfn):
     return rootLogger
 
 class ExpLogger(object):
-    def __init__(self, lp='', ldir='../results'):
+    def __init__(self, lp='', ldir='../results', write_file=True):
         self.log_prefix = lp
         self.log_dir_path = ldir
-        self.logfn = os.path.join(self.log_dir_path, self.log_prefix + 'log.log')
-        os.makedirs(self.log_dir_path)
-        print('{} is created'.format(self.log_dir_path))
-        self.logger = create_logger(self.logfn)
+        if write_file:
+            self.logfn = os.path.join(self.log_dir_path, self.log_prefix + 'log.log')
+            os.makedirs(self.log_dir_path)
+            print('{} is created'.format(self.log_dir_path))
+            self.logger = create_logger(self.logfn)
+        else:
+            self.logger = logging.getLogger()
 
     def write_args(self, args):
         self.message("-------- Parameter Info --------")

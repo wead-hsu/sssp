@@ -12,10 +12,8 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # ------------- CHANGE CONFIGURATIONS HERE ---------------
-#conf_dirs = ['sssp.config.conf_pre_agclf_argparse',]
-#conf_dirs = ['sssp.config.conf_multilabelclf',]
-#conf_dirs = ['sssp.config.conf_semiclf_multilabel']
-conf_dirs = ['sssp.config.conf_clf_multilabel']
+conf_dirs = ['sssp.config.conf_clf',]
+#conf_dirs = ['sssp.config.conf_clf_multilabel']
 # --------------------------------------------------------
 
 def validate(valid_dset, model, sess):
@@ -90,8 +88,8 @@ def main():
 
     # step 2: init dataset
     train_dset = initDataset(args.train_path, model.get_prepare_func(args), args.batch_size)
-    valid_dset = initDataset(args.valid_path, model.get_prepare_func(args), args.batch_size)
-    test_dset = initDataset(args.test_path, model.get_prepare_func(args), args.batch_size)
+    valid_dset = initDataset(args.valid_path, model.get_prepare_func(args), 1)
+    test_dset = initDataset(args.test_path, model.get_prepare_func(args), 1)
 
     # step 3: Init tensorflow
     configproto = tf.ConfigProto()
