@@ -242,7 +242,7 @@ class RnnClassifier(ModelBase):
         return res_dict, res_str, res[0]
     
     def classify(self, sess, sent, mask):
-        feed_dict = {self.input_plh: sent, self.mask_plh: mask}
+        feed_dict = {self.input_plh: sent, self.mask_plh: mask, self.is_training: False}
         fetch = [self.prob]
         prob = sess.run(fetch, feed_dict)
         return prob

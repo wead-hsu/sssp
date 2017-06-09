@@ -674,7 +674,7 @@ def proc_zhongaonan_by_criteria():
                 if value != '\n': tgt = value
                 label_map[key] = tgt
             logger.debug(label_map)
-        tgt_to_id = dict([v, idx+1] for idx, v in enumerate(set(label_map.values())))
+        tgt_to_id = dict([v, idx+1] for idx, v in enumerate(sorted(set(label_map.values()))))
         logger.debug(tgt_to_id)
         label_map = dict([key, tgt_to_id[label_map[key]]] for key in label_map)
         logger.debug(label_map)
@@ -689,6 +689,10 @@ def proc_zhongaonan_by_criteria():
         logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
         data_to_idx(samples, os.path.join('../zhongao/tasks_hasnan', fn))
  
+        with open(os.path.join('../zhongao/tasks_hasnan', fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
     criteria_dir = '../zhongao/raw/split_criteria/characteristic'
     for fn in os.listdir(criteria_dir):
         print(fn)
@@ -697,6 +701,10 @@ def proc_zhongaonan_by_criteria():
         samples = proc_zhongao_by_criteria_help(['作案特点1','作案特点2'], label_map)
         logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
         data_to_idx(samples, os.path.join('../zhongao/tasks_hasnan', fn))
+ 
+        with open(os.path.join('../zhongao/tasks_hasnan', fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
 
 def proc_zhongao_by_criteria():
     def proc_zhongao_by_criteria_help(column_name, label_map):
@@ -760,7 +768,7 @@ def proc_zhongao_by_criteria():
                 if value != '\n': tgt = value
                 label_map[key] = tgt
             logger.debug(label_map)
-        tgt_to_id = dict([v, idx] for idx, v in enumerate(set(label_map.values())))
+        tgt_to_id = dict([v, idx] for idx, v in enumerate(sorted(set(label_map.values()))))
         logger.debug(tgt_to_id)
         label_map = dict([key, tgt_to_id[label_map[key]]] for key in label_map)
         logger.debug(label_map)
@@ -773,8 +781,12 @@ def proc_zhongao_by_criteria():
         print(len(set(label_map.values())))
         samples = proc_zhongao_by_criteria_help(['作案手段'], label_map)
         logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
-        data_to_idx(samples, os.path.join('../zhongao/tasks_hasnan', fn))
- 
+        data_to_idx(samples, os.path.join('../zhongao/tasks_nonan', fn))
+  
+        with open(os.path.join('../zhongao/tasks_nonan', fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
     criteria_dir = '../zhongao/raw/split_criteria/characteristic'
     for fn in os.listdir(criteria_dir):
         print(fn)
@@ -782,7 +794,11 @@ def proc_zhongao_by_criteria():
         print(len(set(label_map.values())))
         samples = proc_zhongao_by_criteria_help(['作案特点1','作案特点2'], label_map)
         logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
-        data_to_idx(samples, os.path.join('../zhongao/tasks_hasnan', fn))
+        data_to_idx(samples, os.path.join('../zhongao/tasks_nonan', fn))
+ 
+        with open(os.path.join('../zhongao/tasks_nonan', fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -794,5 +810,5 @@ if __name__ == '__main__':
     #proc_gongshang_clf()
     #proc_gongshang_semi3k()
     #proc_gongshang_clf3k()
-    #proc_zhongao_by_criteria()
+    proc_zhongao_by_criteria()
     proc_zhongaonan_by_criteria()

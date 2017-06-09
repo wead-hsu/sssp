@@ -1,10 +1,10 @@
-CUDA_VISIBLE_DEVICES=CPU0 python3 run.py --train_path data/zhongao/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
-	--train_label_path data/zhongao/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
-	--train_unlabel_path data/zhongao/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
-	--valid_path data/zhongao/tasks_hasnan/Code_Zasd_ybsd/valid.data.idx \
-	--test_path data/zhongao/tasks_hasnan/Code_Zasd_ybsd/test.data.idx \
-	--vocab_path data/zhongao/tasks_hasnan/Code_Zasd_ybsd/vocab.pkl \
-	--init_from results/zhongao/gatedgru-hasnan/Code_Zasd_ybsd/rnn_test-16000 \
+CUDA_VISIBLE_DEVICES=CPU0 python3 vis.py --train_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
+	--train_label_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
+	--train_unlabel_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
+	--valid_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/valid.data.idx \
+	--test_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/test.data.idx \
+	--vocab_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/vocab.pkl \
+	--init_from results/zhongao/gatedgru-hasnan/Code_Zasd_ybsd/ \
 	--save_dir results/tmp \
 	--rnn_type GatedGRU \
 	--vocab_size 15000 \
