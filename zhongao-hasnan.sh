@@ -35,7 +35,7 @@ vs[Code_zatd_zafw]=15000
 
 
 dir="data/zhongao/tasks_hasnan/"
-save_dir="results/zhongao/taggatedgru-hasnan"
+save_dir="results/zhongao/bigru-hasnan"
 for f in $(ls ${dir});
 do
 	echo "CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py --rnn_type tagGatedGRU \
@@ -49,7 +49,7 @@ do
 		--vocab_size ${vs[${f}]} \
 		--num_classes ${nc[${f}]} &"
 
-	CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py --rnn_type tagGatedGRU \
+	CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py --rnn_type BiGRU \
 		--train_path ${dir}/$f/train.data.idx \
 		--train_label_path ${dir}/$f/train.data.idx \
 		--train_unlabel_path ${dir}/$f/train.data.idx \

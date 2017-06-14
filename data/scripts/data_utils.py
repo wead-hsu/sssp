@@ -739,7 +739,7 @@ def proc_zhongao_by_criteria():
         words = [w for s in splits[0] for w in jieba.cut(s[0])]
         vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=15000)
         print(vocab_size)
-    
+        
         def save_data(samples, vocab, ofn):
             UNK_ID = vocab[UNK_TOKEN]
             with open(ofn, 'w') as f:
@@ -802,6 +802,8 @@ def proc_zhongao_by_criteria():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
+
+    jieba.cut('fds')
     #proc_casetypeclf('../case_type_clf/raw/case_type_clf.csv', '../case_type_clf/proc/log')
     #proc_beer_for_reg()
     #proc_beer_for_clf()
@@ -811,4 +813,4 @@ if __name__ == '__main__':
     #proc_gongshang_semi3k()
     #proc_gongshang_clf3k()
     proc_zhongao_by_criteria()
-    proc_zhongaonan_by_criteria()
+    #proc_zhongaonan_by_criteria()

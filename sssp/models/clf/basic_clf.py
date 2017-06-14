@@ -83,6 +83,17 @@ class RnnClassifier(ModelBase):
                         dtype=tf.float32,
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 weights = tf.zeros(tf.shape(emb_inp)[:2])
+                self.weights = weights
+            elif args.rnn_type == 'BiGRU':
+                cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
+                _, enc_state = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
+                        cell_bw=cell, 
+                        inputs=emb_inp,
+                        sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),
+                        dtype=tf.float32)
+                enc_state = tf.concat(enc_state, axis=1)
+                weights = tf.zeros(tf.shape(emb_inp)[:2])
+                self.weights = weights
             elif args.rnn_type == 'GatedGRU':
                 from sssp.models.layers.gated_gru import GatedGRU
                 """

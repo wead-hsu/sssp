@@ -98,9 +98,9 @@ def plot():
     plt.show()
 
     plt.savefig(args.init_from + '/roc.png')
-    plt.savefig('gru_roc/' + task_name + '.png')
+    plt.savefig('figures/' + task_name + '.png')
     print(args.init_from + '/roc.png')
-    print('gru_roc/' + task_name + '.png')
+    print('figures/' + task_name + '.png')
 plot()
 
 #plt.plot([1,2,3])

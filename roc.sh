@@ -34,8 +34,8 @@ vs[Code_zatd_zafw]=15000
 #echo "${nc[Code_Zasd_blsd]}"
 
 
-dir="data/zhongao/old/tasks_hasnan"
-save_dir="results/zhongao/gru-hasnan"
+dir="data/zhongao/tasks_hasnan"
+save_dir="results/zhongao/gru-hasnan-fixlabel"
 for f in $(ls ${dir});
 do
 	CUDA_VISIBLE_DEVICES=CPU0 nohup python3 roc_draw.py --train_path ${dir}/$f/train.data.idx \
