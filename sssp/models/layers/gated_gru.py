@@ -80,7 +80,8 @@ class GatedGRU(tf.contrib.rnn.RNNCell):
         g = tf.sigmoid(g+1)
 
         s = self._gru_step(prev_s, x_t)
-        s = g * s + (1 - g) * prev_s
+        #s = g * s + (1 - g) * prev_s
+        s = g * s + prev_s # similar performance
         
         return s, g
 

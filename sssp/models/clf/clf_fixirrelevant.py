@@ -63,13 +63,12 @@ class RnnClassifier(ModelBase):
         with tf.variable_scope(scope_name):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
             
-            list_enc_state = []
+            #list_enc_state = []
             if args.rnn_type == 'GatedGRU':
                 from sssp.models.layers.gated_gru import GatedGRU
                 """
                 enc_layer = GatedGRU(emb_inp.shape[2], args.num_units)
                 enc_state, weights = enc_layer.forward(emb_inp, msk, return_final=True)
-                """
                 cell =  tf.contrib.rnn.GRUCell(args.num_units)
                 enc_states, enc_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
@@ -77,13 +76,14 @@ class RnnClassifier(ModelBase):
                         initial_state=cell.zero_state(tf.shape(emb_inp)[0], dtype=tf.float32),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 list_enc_state.append(enc_state)
+                """
                 cell = GatedGRU(emb_inp.shape[2], args.num_units)
                 enc_states, enc_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         dtype=tf.float32,
-                        #initial_state=(enc_state, cell.zero_state(tf.shape(emb_inp)[0],dtype=tf.float32)[1]),
+                        #initial_state=cell.zero_state(tf.shape(emb_inp)[0],dtype=tf.float32),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
-                list_enc_state.append(enc_state[0])
+                #list_enc_state.append(enc_state[0])
                 weights = enc_states[1]
                 self.weights = weights
                 self._logger.debug(enc_state[0].shape)
@@ -91,9 +91,9 @@ class RnnClassifier(ModelBase):
                 self._logger.debug(weights.shape)
 
             self._logger.info("Encoder done")
-            return list_enc_state, weights
+            return enc_state
 
-    def create_softmax(self, enc_state, num_classes, scope, args):
+    def _create_fclayers(self, enc_state, num_classes, scope, args):
         enc_state = tf.contrib.layers.fully_connected(enc_state, 30, scope=scope+'fc0')
         enc_state = tf.nn.tanh(enc_state)
         enc_state = tf.nn.dropout(enc_state, tf.where(self.is_training, 0.5, 1.0))
@@ -111,43 +111,35 @@ class RnnClassifier(ModelBase):
             self.init_global_step()
             self._create_placeholders(args)
             self._create_embedding_matrix(args)
-
-            seqlen = tf.to_int32(tf.reduce_sum(self.mask_plh, axis=1))
-            list_enc_state, _ = self._create_encoder(
+            
+            batch_size = tf.shape(self.input_plh)[0]
+            seqlen = tf.to_int64(tf.reduce_sum(self.mask_plh, axis=1))
+            enc_state, _ = self._create_encoder(
                     inp=self.input_plh,
                     msk=self.mask_plh,
                     keep_rate=args.keep_rate,
                     scope_name='enc_rnn',
                     args=args)
 
-            list_logits = []
-            list_logits.append(self.create_softmax(list_enc_state[0], 2, 'isnan_', args))
-            list_logits.append(self.create_softmax(list_enc_state[1], args.num_classes, 'specific_', args))
-
-            self.list_prob = [tf.nn.softmax(l) for l in list_logits]
+            logits = self._create_fclayers(enc_state, args.num_classes, 'fclayers', args)
+            full_logits = tf.concat([tf.zeros([batch_size,1]), logits], axis=1) # the irrelevant is concatenated on the left
             
-            list_pred = [tf.argmax(l, axis=1) for l in self.list_prob]
-            list_labelmask = [True, tf.equal(self.list_label_plh[0], 1)] # True == meaningful
+            def log_sum_exp(logits):
+                m = tf.reduce_max(logits, axis=1)
+                return m + tf.log(tf.reduce_sum(tf.exp(logits - m[:, None]), axis=1))
+            
+            print(logits, tf.range(batch_size), self.list_label_plh[1])
+            loss_pos = - tf.gather_nd(logits, tf.transpose([tf.range(tf.to_int64(batch_size)), self.list_label_plh[1]]))
+            loss_pos +=  log_sum_exp(full_logits)
+            loss_neg = tf.nn.softplus(log_sum_exp(logits))
+            self.loss = tf.where(tf.equal(self.list_label_plh[0], 0), loss_neg, loss_pos)
+            self.loss = tf.reduce_mean(self.loss)
             
             # duplicate
-            self.accuracy = [tf.equal(list_pred[i], self.list_label_plh[i]) for i in range(2)]
-            #self.accuracy = [tf.logical_or(self.accuracy[i], tf.logical_not(list_labelmask[i])) for i in range(2)]
-            self.accuracy0, self.accuracy1 = self.accuracy
-            self.accuracy0 = tf.reduce_mean(tf.cast(self.accuracy0, tf.float32))
-            self.accuracy1 = tf.where(tf.equal(self.list_label_plh[0], 0), tf.zeros_like(self.accuracy1, dtype=tf.float32), tf.cast(self.accuracy1, tf.float32))
-            self.accuracy1 = tf.reduce_sum(self.accuracy1) / (tf.cast(tf.reduce_sum(self.list_label_plh[0]), tf.float32) + 0.001)
-
-            self.prob_leaves = tf.concat([self.list_prob[0][:, 0][:, None], self.list_prob[0][:, 1][:,None] * self.list_prob[1]], axis=1)
-            self.pred = tf.argmax(self.prob_leaves, axis=1)
+            self.pred = tf.argmax(full_logits, axis=1)
             self.target_label = tf.where(tf.equal(self.list_label_plh[0], 0), self.list_label_plh[0], self.list_label_plh[1] + 1)
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.pred, self.target_label), tf.float32))
-
-            self.list_loss = [tf.nn.sparse_softmax_cross_entropy_with_logits(
-                    labels=self.list_label_plh[i],
-                    logits=list_logits[i]) * tf.cast(list_labelmask[i], tf.float32) for i in range(2)]
-            self.loss = tf.add_n(self.list_loss)
-            self.loss = tf.reduce_mean(self.loss)
-
+           
             tf.summary.scalar('loss', self.loss)
             
             '''
@@ -181,8 +173,6 @@ class RnnClassifier(ModelBase):
             fetch_dict = [
                     ['loss', self.loss],
                     ['acc', self.accuracy],
-                    ['acc0', self.accuracy0],
-                    ['acc1', self.accuracy1],
                     ]
 
             feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, istrn]])
@@ -195,8 +185,6 @@ class RnnClassifier(ModelBase):
             fetch_dict = [
                     ['loss', self.loss],
                     ['acc', self.accuracy],
-                    ['acc0', self.accuracy0],
-                    ['acc1', self.accuracy1],
                     ]
 
             feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, istrn]])
