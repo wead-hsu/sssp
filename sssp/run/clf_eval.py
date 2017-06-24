@@ -8,6 +8,8 @@ from sssp.io.batch_iterator import threaded_generator
 from sssp.utils.utils import average_res, res_to_string
 import tensorflow as tf
 import logging
+import pickle as pkl
+import numpy as np
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -16,14 +18,24 @@ conf_dirs = ['sssp.config.conf_clf',]
 #conf_dirs = ['sssp.config.conf_clf_multilabel']
 # --------------------------------------------------------
 
-def validate(valid_dset, model, sess):
+def validate(valid_dset, model, sess, idx2word, label2word, args):
     res_list = []
     threaded_it = threaded_generator(valid_dset, 200)
+    f = open(os.path.join(args.save_dir, 'res_sample.txt'), 'w', encoding='utf-8')
+    f.write('pred\ttarget\ttxt\n')
     for batch in threaded_it:
-        res_dict, res_str, summary = model.run_batch(sess, batch, istrn=False)
-        res_list.append(res_dict)
-    out_str = res_to_string(average_res(res_list))
-    return out_str
+        prob, pred = model.classify(sess, *batch[:2])
+        tgt = np.where(batch[2]==0, 0, batch[3]+1)
+        pred = [label2word[idx] for idx in pred]
+        tgt = [label2word[idx] for idx in tgt]
+        inp = [[idx2word[idx] for idx in s if idx != 0] for s in batch[0]]
+        
+        for i in range(len(tgt)):
+            f.write(pred[i] + '\t')
+            f.write(tgt[i] + '\t')
+            f.write(''.join(inp[i]) + '\n')
+
+    return
 
 def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, explogger):
     batch_cnt = 0
@@ -73,7 +85,7 @@ def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, exp
 def main():
     # load all args for the experiment
     args = utils.load_argparse_args(conf_dirs=conf_dirs)
-    explogger = exp_logger.ExpLogger(args.log_prefix, args.save_dir)
+    explogger = exp_logger.ExpLogger(args.log_prefix, args.save_dir, write_file=False)
     wargs = vars(args)
     wargs['conf_dirs'] = conf_dirs
     explogger.write_args(wargs)
@@ -87,22 +99,25 @@ def main():
     explogger.write_variables(vs)
 
     # step 2: init dataset
-    get_prepare_func = utils.get_prepare_func
-    if args.task_id is not None: get_prepare_func = utils.get_prepare_func_for_certain_task
-    train_dset = initDataset(args.train_path, get_prepare_func(args), args.batch_size)
-    valid_dset = initDataset(args.valid_path, get_prepare_func(args), args.batch_size)
-    test_dset = initDataset(args.test_path, get_prepare_func(args), args.batch_size)
+    train_dset = initDataset(args.train_path, model.get_prepare_func(args), args.batch_size)
+    valid_dset = initDataset(args.valid_path, model.get_prepare_func(args), 10)
+    test_dset = initDataset(args.test_path, model.get_prepare_func(args), 10)
+
+    vocab = pkl.load(open(args.vocab_path, 'rb'))
+    idx2word = dict([[vocab[k], k] for k in vocab])
+    labels = pkl.load(open(args.labels_path, 'rb'))
+    label2word = dict([[labels[k]+1, k.strip()] for k in labels])
+    label2word[0] = 'NAN'
 
     # step 3: Init tensorflow
     configproto = tf.ConfigProto()
     configproto.gpu_options.allow_growth = True
     configproto.allow_soft_placement = True
     with tf.Session(config=configproto) as sess:
-        if args.init_from:
-            model.saver.restore(sess, args.init_from)
-            explogger.message('Model restored from {0}'.format(args.init_from))
-        else:
-            tf.global_variables_initializer().run()
+        model.saver.restore(sess, args.init_from)
+        explogger.message('Model restored from {0}'.format(args.init_from))
+        print(validate(test_dset, model, sess, idx2word, label2word, args))
+        """
         train_and_validate(args, 
                 model=model, 
                 sess=sess, 
@@ -110,3 +125,4 @@ def main():
                 valid_dset=valid_dset,
                 test_dset=test_dset,
                 explogger=explogger)
+        """

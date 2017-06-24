@@ -34,21 +34,14 @@ vs[Code_zatd_zafw]=1760
 #echo "${nc[Code_Zasd_blsd]}"
 
 
-dir="data/zhongao/tasks_hasnan/"
-save_dir="results/zhongao/gatedgru-hasnan"
+dir="data/zhongao/proc/070616/tasks_hasnan/"
+save_dir="results/zhongao/0616/gru-hasnan"
 for f in $(ls ${dir});
 do
-	echo "CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py --train_path ${dir}/$f/train.data.idx \
-		--train_label_path ${dir}/$f/train.data.idx \
-		--train_unlabel_path ${dir}/$f/train.data.idx \
-		--valid_path ${dir}/$f/valid.data.idx \
-		--test_path ${dir}/$f/test.data.idx \
-		--vocab_path ${dir}/$f/vocab.pkl \
-		--save_dir ${save_dir}/$f \
-		--vocab_size ${vs[${f}]} \
-		--num_classes ${nc[${f}]} &"
-
-	CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py --train_path ${dir}/$f/train.data.idx \
+	CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py 
+		--model_path sssp.models.clf.basic_clf\
+		--rnn_type GRU \
+		--train_path ${dir}/$f/train.data.idx \
 		--train_label_path ${dir}/$f/train.data.idx \
 		--train_unlabel_path ${dir}/$f/train.data.idx \
 		--valid_path ${dir}/$f/valid.data.idx \

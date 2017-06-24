@@ -31,12 +31,10 @@ class RnnClassifier(ModelBase):
                 shape=[None, None],
                 name='mask_plh')
 
-        self.list_label_plh = []
-        for idx in range(2):
-            self.list_label_plh.append(tf.placeholder(
+        self.label_plh = tf.placeholder(
                 dtype=tf.int64,
                 shape=[None],
-                name='label_plh_{}'.format(idx)))
+                name='label_plh')
 
         self.is_training = tf.placeholder(
                 dtype=tf.bool,
@@ -66,24 +64,11 @@ class RnnClassifier(ModelBase):
             #list_enc_state = []
             if args.rnn_type == 'GatedGRU':
                 from sssp.models.layers.gated_gru import GatedGRU
-                """
-                enc_layer = GatedGRU(emb_inp.shape[2], args.num_units)
-                enc_state, weights = enc_layer.forward(emb_inp, msk, return_final=True)
-                cell =  tf.contrib.rnn.GRUCell(args.num_units)
-                enc_states, enc_state = tf.nn.dynamic_rnn(cell=cell,
-                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
-                        dtype=tf.float32,
-                        initial_state=cell.zero_state(tf.shape(emb_inp)[0], dtype=tf.float32),
-                        sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
-                list_enc_state.append(enc_state)
-                """
                 cell = GatedGRU(emb_inp.shape[2], args.num_units)
                 enc_states, enc_state = tf.nn.dynamic_rnn(cell=cell,
                         inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         dtype=tf.float32,
-                        #initial_state=cell.zero_state(tf.shape(emb_inp)[0],dtype=tf.float32),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
-                #list_enc_state.append(enc_state[0])
                 weights = enc_states[1]
                 self.weights = weights
                 self._logger.debug(enc_state[0].shape)
@@ -121,24 +106,16 @@ class RnnClassifier(ModelBase):
                     scope_name='enc_rnn',
                     args=args)
 
-            logits = self._create_fclayers(enc_state, args.num_classes, 'fclayers', args)
+            logits = self._create_fclayers(enc_state, args.num_classes-1, 'fclayers', args)
             full_logits = tf.concat([tf.zeros([batch_size,1]), logits], axis=1) # the irrelevant is concatenated on the left
             
-            def log_sum_exp(logits):
-                m = tf.reduce_max(logits, axis=1)
-                return m + tf.log(tf.reduce_sum(tf.exp(logits - m[:, None]), axis=1))
-            
-            print(logits, tf.range(batch_size), self.list_label_plh[1])
-            loss_pos = - tf.gather_nd(logits, tf.transpose([tf.range(tf.to_int64(batch_size)), self.list_label_plh[1]]))
-            loss_pos +=  log_sum_exp(full_logits)
-            loss_neg = tf.nn.softplus(log_sum_exp(logits))
-            self.loss = tf.where(tf.equal(self.list_label_plh[0], 0), loss_neg, loss_pos)
+            self.loss = tf.losses.sparse_softmax_cross_entropy(self.label_plh, full_logits)
             self.loss = tf.reduce_mean(self.loss)
             
             # duplicate
             self.pred = tf.argmax(full_logits, axis=1)
-            self.target_label = tf.where(tf.equal(self.list_label_plh[0], 0), self.list_label_plh[0], self.list_label_plh[1] + 1)
-            self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.pred, self.target_label), tf.float32))
+            self.prob = tf.nn.softmax(full_logits)
+            self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.pred, self.label_plh), tf.float32))
            
             tf.summary.scalar('loss', self.loss)
             
@@ -167,7 +144,7 @@ class RnnClassifier(ModelBase):
 
     def run_batch(self, sess, inps, istrn=True):
         plhs = [self.input_plh,
-                self.mask_plh,] + self.list_label_plh
+                self.mask_plh, self.label_plh]
 
         if istrn:
             fetch_dict = [
@@ -196,9 +173,9 @@ class RnnClassifier(ModelBase):
     
     def classify(self, sess, sent, mask):
         feed_dict = {self.input_plh: sent, self.mask_plh: mask, self.is_training: False}
-        fetch = [self.prob]
-        prob = sess.run(fetch, feed_dict)
-        return prob
+        fetch = [self.prob, self.pred]
+        prob, pred = sess.run(fetch, feed_dict)
+        return prob, pred
 
     def _create_saver(self, args):
         # -------------- initialization and restore ---------------
