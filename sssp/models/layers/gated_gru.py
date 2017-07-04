@@ -23,9 +23,10 @@ class GatedGRU(tf.contrib.rnn.RNNCell):
             self.U_1 = tf.get_variable('U1', shape=[inp_size, num_units], )
             self.b_1 = tf.get_variable('b1', shape=[num_units], initializer=tf.constant_initializer(0.))
     
-            self.W_g = tf.get_variable('W_g', shape=[inp_size + num_units, num_units], )#initializer=xav_init())
-            self.b_g = tf.get_variable('b_g', shape=[num_units], initializer=tf.constant_initializer(0.))
-            self.u_g = tf.get_variable('u_g', shape=[num_units, 1])
+            self.W_g0 = tf.get_variable('W_g0', shape=[inp_size + num_units, num_units], )#initializer=xav_init())
+            self.b_g0 = tf.get_variable('b_g0', shape=[num_units], initializer=tf.constant_initializer(0.))
+            self.W_g1 = tf.get_variable('W_g1', shape=[num_units, 1])
+            self.b_g1 = tf.get_variable('b_g1', shape=[1])
     
     def forward(self, inp, msk, initial_state=None, time_major=False, return_final=False, scope='GatedGRU'):
         """ to build the graph, run forward """
@@ -76,7 +77,8 @@ class GatedGRU(tf.contrib.rnn.RNNCell):
     def _gate_step(self, states, x_t):
         prev_s, prev_g = states
         
-        g = tf.matmul(tf.matmul(tf.concat([prev_s, x_t], axis=1), self.W_g) + self.b_g, self.u_g)
+        g = tf.tanh(tf.matmul(tf.concat([prev_s, x_t], axis=1), self.W_g0) + self.b_g0)
+        g = tf.matmul(g, self.W_g1)+self.b_g1
         g = tf.sigmoid(g+1)
 
         s = self._gru_step(prev_s, x_t)

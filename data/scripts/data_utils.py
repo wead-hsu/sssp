@@ -837,7 +837,7 @@ def proc_zhongaonan_by_criteria_for_hierachy():
         words = [w for s in splits[0] for w in jieba.cut(s[0])]
         vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=15000)
         print(vocab_size)
-        return
+    
         def save_data(samples, vocab, ofn):
             UNK_ID = vocab[UNK_TOKEN]
             with open(ofn, 'w') as f:
@@ -1190,6 +1190,364 @@ def proc_0616_zhongaonan_by_criteria_for_hierachy():
             for l in label_map:
                 f.write(l + '\t' + str(label_map[l]) + '\n')
 
+def proc_zhongaonan_inchar_by_criteria():
+    def proc_zhongao_by_criteria_help(column_name, label_map):
+        ifn = '../zhongao/raw/070601/070601.csv'
+        df = pandas.read_csv(ifn)
+        label = df[column_name]
+        txt = df['案情']
+        shotlines = []
+        for i in range(label.shape[0]):
+            label_i = label.iloc[i].tolist()
+            txt_i = txt.iloc[i]
+            if type(txt_i) != str:
+                continue
+            cnt = 0
+            for l in label_i:
+                if l in label_map:
+                    shotlines.append([txt_i, label_map[l]])
+                    cnt += 1
+            if cnt == 0:
+                shotlines.append([txt_i, 0])
+            #if cnt == 2:
+                #logger.warn('WARNING, has two labels: {} {}'.format(txt_i, label_i))
+        return shotlines
+    
+    def data_to_idx(samples, save_dir):
+        samples = [samples[i] for i in np.random.permutation(len(samples))]
+        list_portion = [0.83, 0.06, 0.07]
+        divide_pos = [int(sum(list_portion[:i])*len(samples)) for i in range(len(list_portion)+1)]
+        splits = [samples[divide_pos[i]: divide_pos[i+1]] for i in range(len(list_portion))]
+        for s in splits[0]:
+            if type(s[0]) != str:
+                print(s)
+        words = [w for s in splits[0] for w in (s[0])]
+        vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=15000)
+        print(vocab_size)
+        
+        def save_data(samples, vocab, ofn):
+            UNK_ID = vocab[UNK_TOKEN]
+            with open(ofn, 'w') as f:
+                for s in samples:
+                    words = [w for w in (s[0])]
+                    word_idx = [str(vocab.get(w, UNK_ID)) for w in words]
+                    f.write(str(s[1]))
+                    f.write('\t' + ' '.join(word_idx))
+                    f.write('\n')
+    
+        os.mkdir(save_dir)
+        names = ['train.data.idx', 'valid.data.idx', 'test.data.idx']
+        for i in range(3):
+            data = splits[i]
+            name = names[i]
+            save_data(data, vocab, os.path.join(save_dir, name))
+        with open(os.path.join(save_dir, 'vocab.pkl'), 'wb') as f:
+            pkl.dump(vocab, f)
+
+    def get_label_map(fn):
+        with open(fn, 'r') as f:
+            label_map = {}
+            tgt = ''
+            for l in f:
+                key, value = l.split('\t')
+                if value != '\n': tgt = value
+                label_map[key] = tgt
+            logger.debug(label_map)
+        tgt_to_id = dict([v, idx+1] for idx, v in enumerate(sorted(set(label_map.values()))))
+        logger.debug(tgt_to_id)
+        label_map = dict([key, tgt_to_id[label_map[key]]] for key in label_map)
+        logger.debug(label_map)
+        return label_map, tgt_to_id
+    
+    save_dir = '../zhongao/proc/070606/tasks_hasnan_inchar'
+    criteria_dir = '../zhongao/raw/split_criteria/approach'
+    for fn in os.listdir(criteria_dir):
+        print(fn)
+        label_map, tgt_to_id = get_label_map(os.path.join(criteria_dir, fn))
+        print(len(set(label_map.values()))+1)
+        samples = proc_zhongao_by_criteria_help(['作案手段'], label_map)
+        logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
+        data_to_idx(samples, os.path.join(save_dir, fn))
+ 
+        with open(os.path.join(save_dir, fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
+        with open(os.path.join(save_dir, fn) + '/labels.pkl', 'wb') as f:
+            pkl.dump(tgt_to_id, f)
+
+    criteria_dir = '../zhongao/raw/split_criteria/characteristic'
+    for fn in os.listdir(criteria_dir):
+        print(fn)
+        label_map, tgt_to_id = get_label_map(os.path.join(criteria_dir, fn))
+        print(len(set(label_map.values()))+1)
+        samples = proc_zhongao_by_criteria_help(['作案特点1','作案特点2'], label_map)
+        logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
+        data_to_idx(samples, os.path.join(save_dir, fn))
+ 
+        with open(os.path.join(save_dir, fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
+        with open(os.path.join(save_dir, fn) + '/labels.pkl', 'wb') as f:
+            pkl.dump(tgt_to_id, f)
+
+def proc_zhongao_inchar_by_criteria():
+    def proc_zhongao_by_criteria_help(column_name, label_map):
+        ifn = '../zhongao/raw/070601/070601.csv'
+        df = pandas.read_csv(ifn)
+        label = df[column_name]
+        txt = df['案情']
+        shotlines = []
+        for i in range(label.shape[0]):
+            label_i = label.iloc[i].tolist()
+            txt_i = txt.iloc[i]
+            if type(txt_i) != str:
+                continue
+            cnt = 0
+            for l in label_i:
+                if l in label_map:
+                    shotlines.append([txt_i, label_map[l]])
+                    cnt += 1
+            #if cnt == 2:
+                #logger.warn('WARNING, has two labels: {} {}'.format(txt_i, label_i))
+        return shotlines
+    
+    def data_to_idx(samples, save_dir):
+        samples = [samples[i] for i in np.random.permutation(len(samples))]
+        list_portion = [0.83, 0.06, 0.07]
+        divide_pos = [int(sum(list_portion[:i])*len(samples)) for i in range(len(list_portion)+1)]
+        splits = [samples[divide_pos[i]: divide_pos[i+1]] for i in range(len(list_portion))]
+        
+        for s in splits[0]:
+            if type(s[0]) != str:
+                print(s)
+        words = [w for s in splits[0] for w in (s[0])]
+        vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=15000)
+        print(vocab_size)
+        
+        def save_data(samples, vocab, ofn):
+            UNK_ID = vocab[UNK_TOKEN]
+            with open(ofn, 'w') as f:
+                for s in samples:
+                    words = [w for w in s[0]]
+                    word_idx = [str(vocab.get(w, UNK_ID)) for w in words]
+                    f.write(str(s[1]))
+                    f.write('\t' + ' '.join(word_idx))
+                    f.write('\n')
+    
+        os.mkdir(save_dir)
+        names = ['train.data.idx', 'valid.data.idx', 'test.data.idx']
+        for i in range(3):
+            data = splits[i]
+            name = names[i]
+            save_data(data, vocab, os.path.join(save_dir, name))
+        with open(os.path.join(save_dir, 'vocab.pkl'), 'wb') as f:
+            pkl.dump(vocab, f)
+
+    def get_label_map(fn):
+        with open(fn, 'r') as f:
+            label_map = {}
+            tgt = ''
+            for l in f:
+                key, value = l.split('\t')
+                if value != '\n': tgt = value
+                label_map[key] = tgt
+            logger.debug(label_map)
+        tgt_to_id = dict([v, idx] for idx, v in enumerate(sorted(set(label_map.values()))))
+        logger.debug(tgt_to_id)
+        label_map = dict([key, tgt_to_id[label_map[key]]] for key in label_map)
+        logger.debug(label_map)
+        return label_map, tgt_to_id
+    
+    save_dir = '../zhongao/proc/070606/tasks_nonan_inchar'
+    criteria_dir = '../zhongao/raw/split_criteria/approach'
+    for fn in os.listdir(criteria_dir):
+        print(fn)
+        label_map, tgt_to_id = get_label_map(os.path.join(criteria_dir, fn))
+        print(len(set(label_map.values())))
+        samples = proc_zhongao_by_criteria_help(['作案手段'], label_map)
+        logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
+        data_to_idx(samples, os.path.join(save_dir, fn))
+  
+        with open(os.path.join(save_dir, fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
+        with open(os.path.join(save_dir, fn) + '/labels.pkl', 'wb') as f:
+            pkl.dump(tgt_to_id, f)
+
+    criteria_dir = '../zhongao/raw/split_criteria/characteristic'
+    for fn in os.listdir(criteria_dir):
+        print(fn)
+        label_map, tgt_to_id = get_label_map(os.path.join(criteria_dir, fn))
+        print(len(set(label_map.values())))
+        samples = proc_zhongao_by_criteria_help(['作案特点1','作案特点2'], label_map)
+        logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
+        data_to_idx(samples, os.path.join(save_dir, fn))
+ 
+        with open(os.path.join(save_dir, fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
+        with open(os.path.join(save_dir, fn) + '/labels.pkl', 'wb') as f:
+            pkl.dump(tgt_to_id, f)
+
+def proc_zhongaonan_inchar_by_criteria_for_hierachy():
+    def proc_zhongao_by_criteria_help(column_name, label_map):
+        ifn = '../zhongao/raw/070601/070601.csv'
+        df = pandas.read_csv(ifn)
+        label = df[column_name]
+        txt = df['案情']
+        shotlines = []
+        for i in range(label.shape[0]):
+            label_i = label.iloc[i].tolist()
+            txt_i = txt.iloc[i]
+            if type(txt_i) != str:
+                continue
+            cnt = 0
+            for l in label_i:
+                if l in label_map:
+                    shotlines.append([txt_i, 1, label_map[l]])
+                    cnt += 1
+            if cnt == 0:
+                shotlines.append([txt_i, 0, 0])
+            #if cnt == 2:
+                #logger.warn('WARNING, has two labels: {} {}'.format(txt_i, label_i))
+        return shotlines
+    
+    def data_to_idx(samples, save_dir):
+        samples = [samples[i] for i in np.random.permutation(len(samples))]
+        list_portion = [0.83, 0.06, 0.07]
+        divide_pos = [int(sum(list_portion[:i])*len(samples)) for i in range(len(list_portion)+1)]
+        splits = [samples[divide_pos[i]: divide_pos[i+1]] for i in range(len(list_portion))]
+        for s in splits[0]:
+            if type(s[0]) != str:
+                print(s)
+        words = [w for s in splits[0] for w in s[0]]
+        vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=15000)
+        print(vocab_size)
+        
+        def save_data(samples, vocab, ofn):
+            UNK_ID = vocab[UNK_TOKEN]
+            with open(ofn, 'w') as f:
+                for s in samples:
+                    words = [w for w in s[0]]
+                    word_idx = [str(vocab.get(w, UNK_ID)) for w in words]
+                    f.write(str(s[1]) + '\t' + str(s[2]))
+                    f.write('\t' + ' '.join(word_idx))
+                    f.write('\n')
+    
+        os.mkdir(save_dir)
+        names = ['train.data.idx', 'valid.data.idx', 'test.data.idx']
+        for i in range(3):
+            data = splits[i]
+            name = names[i]
+            save_data(data, vocab, os.path.join(save_dir, name))
+        with open(os.path.join(save_dir, 'vocab.pkl'), 'wb') as f:
+            pkl.dump(vocab, f)
+
+    def get_label_map(fn):
+        with open(fn, 'r') as f:
+            label_map = {}
+            tgt = ''
+            for l in f:
+                key, value = l.split('\t')
+                if value != '\n': tgt = value
+                label_map[key] = tgt
+            logger.debug(label_map)
+        tgt_to_id = dict([v, idx] for idx, v in enumerate(sorted(set(label_map.values()))))
+        logger.debug(tgt_to_id)
+        label_map = dict([key, tgt_to_id[label_map[key]]] for key in label_map)
+        logger.debug(label_map)
+        return label_map, tgt_to_id
+    
+    criteria_dir = '../zhongao/raw/split_criteria/approach'
+    save_dir = '../zhongao/proc/070606/tasks_hasnan_inchar_hierachy/'
+    for fn in os.listdir(criteria_dir):
+        print(fn)
+        label_map, tgt_to_id = get_label_map(os.path.join(criteria_dir, fn))
+        print(len(set(label_map.values()))+1)
+        samples = proc_zhongao_by_criteria_help(['作案手段'], label_map)
+        logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
+        data_to_idx(samples, os.path.join(save_dir, fn))
+ 
+        with open(os.path.join(save_dir, fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
+        with open(os.path.join(save_dir, fn) + '/labels.pkl', 'wb') as f:
+            pkl.dump(tgt_to_id, f)
+
+    criteria_dir = '../zhongao/raw/split_criteria/characteristic'
+    for fn in os.listdir(criteria_dir):
+        print(fn)
+        label_map, tgt_to_id = get_label_map(os.path.join(criteria_dir, fn))
+        print(len(set(label_map.values()))+1)
+        samples = proc_zhongao_by_criteria_help(['作案特点1','作案特点2'], label_map)
+        logger.info('task: {}, number of samples: {}'.format(fn, len(samples)))
+        data_to_idx(samples, os.path.join(save_dir, fn))
+ 
+        with open(os.path.join(save_dir, fn) + '/label_map', 'w') as f:
+            for l in label_map:
+                f.write(l + '\t' + str(label_map[l]) + '\n')
+
+        with open(os.path.join(save_dir, fn) + '/labels.pkl', 'wb') as f:
+            pkl.dump(tgt_to_id, f)
+
+def proc_semeval2010task8():
+    rawdata_train_fn = '../semeval2018task8/raw/SemEval2010_task8_all_data/SemEval2010_task8_training/TRAIN_FILE.TXT'
+    rawdata_test_fn = '../semeval2018task8/raw/SemEval2010_task8_all_data/SemEval2010_task8_testing_keys/TEST_FILE_FULL.TXT'
+
+    def read_rawdata(fn):
+        samples = []
+        with open(fn, 'r') as f:
+            lines = f.read().split('\n')
+            for i in range(len(lines)//4):
+                txt = lines[i*4].strip().split('\t')[1][1:-1]
+                txt = txt.replace('<e1>','').replace('</e1>','').replace('<e2>','').replace('</e2>','')
+                label = lines[i*4+1].strip().split('(')[0]
+                samples.append([txt,label])
+        return samples
+
+    train_data = read_rawdata(rawdata_train_fn)
+    train_data = [train_data[i] for i in np.random.permutation(len(train_data))]
+    train_data, valid_data = train_data[400:], train_data[:400]
+    test_data = read_rawdata(rawdata_test_fn)
+
+    words = [w for sample in train_data for w in wt(sample[0])]
+    word_cnt = Counter(words)
+    vocab, vocab_size = build_vocab(word_cnt, max_vocab_size=15000)
+    labels = set([sample[1] for sample in train_data])
+    labels.remove('Other')
+    label2idx = dict([[v, i+1] for i, v in enumerate(labels)])
+    label2idx['Other'] = 0
+
+    def save_data(samples, vocab, ofn):
+        UNK_ID = vocab[UNK_TOKEN]
+        with open(ofn, 'w') as f:
+            for s in samples:
+                words = [w for w in wt(s[0])]
+                word_idx = [str(vocab.get(w, UNK_ID)) for w in words]
+                f.write(str(label2idx[s[1]]))
+                f.write('\t' + ' '.join(word_idx))
+                f.write('\n')
+    
+    save_dir = '../semeval2018task8/proc/'
+    #os.mkdir(save_dir)
+    splits = [train_data, valid_data, test_data]
+    names = ['train.data.idx', 'valid.data.idx', 'test.data.idx']
+    for i in range(3):
+        data = splits[i]
+        name = names[i]
+        save_data(data, vocab, os.path.join(save_dir, name))
+
+    with open(os.path.join(save_dir, 'vocab.pkl'), 'wb') as f:
+        pkl.dump(vocab, f)
+
+    with open(os.path.join(save_dir, 'label2idx.pkl'), 'wb') as f:
+        pkl.dump(label2idx, f)
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
@@ -1203,7 +1561,11 @@ if __name__ == '__main__':
     #proc_gongshang_clf3k()
     #proc_zhongao_by_criteria()
     #proc_zhongaonan_by_criteria()
-    proc_zhongaonan_by_criteria_for_hierachy()
+    #proc_zhongaonan_by_criteria_for_hierachy()
     #proc_0616_zhongao_by_criteria()
     #proc_0616_zhongaonan_by_criteria()
     #proc_0616_zhongaonan_by_criteria_for_hierachy()
+    #proc_zhongao_inchar_by_criteria()
+    #proc_zhongaonan_inchar_by_criteria()
+    #proc_zhongaonan_inchar_by_criteria_for_hierachy()
+    proc_semeval2010task8()

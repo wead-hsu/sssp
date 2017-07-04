@@ -45,13 +45,13 @@ vs[Code_zatd_zzxs]=15000
 #echo "${nc[Code_Zasd_blsd]}"
 
 
-dir="data/zhongao/proc/070616/tasks_hasnan/"
-save_dir="results/zhongao/0616/gru-hasnan"
+dir="data/zhongao/tasks_hasnan"
+save_dir="results/zhongao/gatedgru_nonlin-regl1_0.0003-regdiff_0.0006-fixirrelevant"
 for f in $(ls ${dir});
 do
 	CUDA_VISIBLE_DEVICES=0 nohup python3 clf.py \
 		--model_path sssp.models.clf.basic_clf \
-		--rnn_type GRU \
+		--rnn_type "GatedGRU" \
 		--train_path ${dir}/$f/train.data.idx \
 		--train_label_path ${dir}/$f/train.data.idx \
 		--train_unlabel_path ${dir}/$f/train.data.idx \
@@ -60,5 +60,9 @@ do
 		--vocab_path ${dir}/$f/vocab.pkl \
 		--save_dir ${save_dir}/$f \
 		--vocab_size ${vs[${f}]} \
-		--num_classes ${nc[${f}]} &
+		--num_classes ${nc[${f}]} \
+		--w_regl1 0.0003\
+		--w_regdiff 0.0006\
+		--fixirrelevant True &
+		#--validate_every 400 &
 done

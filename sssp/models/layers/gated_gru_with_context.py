@@ -2,12 +2,6 @@ import tensorflow as tf
 
 class GatedGRU(object):
     def __init__(self, inp_size, context_size, num_units):
-        """
-        GRU implemetation. 
-        Args:
-            inp_size: input_size
-            hidden_size: number of units of hidden variable
-        """
         # intializer
         self.inp_size = inp_size
         self.num_units = num_units
@@ -64,7 +58,7 @@ class GatedGRU(object):
         prev_s, prev_g = states
         x_t, b_t, m_t = inputs
         
-        g = tf.matmul(tf.matmul(tf.concat([prev_s, x_t, b_t], axis=1), self.W_g) + self.b_g, self.u_g)
+        g = tf.matmul(tf.tanh(tf.matmul(tf.concat([prev_s, x_t, b_t], axis=1), self.W_g) + self.b_g), self.u_g)
         g = tf.sigmoid(g)
 
         s = self._gru_step(prev_s, inputs)

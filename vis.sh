@@ -1,11 +1,14 @@
-CUDA_VISIBLE_DEVICES=CPU0 python3 vis.py --train_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
-	--train_label_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
-	--train_unlabel_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/train.data.idx \
-	--valid_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/valid.data.idx \
-	--test_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/test.data.idx \
-	--vocab_path data/zhongao/old/tasks_hasnan/Code_Zasd_ybsd/vocab.pkl \
-	--init_from results/zhongao/gatedgru-hasnan/Code_Zasd_ybsd/ \
+CUDA_VISIBLE_DEVICES=CPU0 python3 vis.py \
+	--model_path sssp.models.clf.basic_clf \
+	--rnn_type "GatedGRU" \
+	--fixirrelevant True \
+	--init_from results/zhongao/gatedgru-hasnan-fixirrelevant-flattendataset/Code_zatd_xwtd/rnn_test-76000 \
+	--train_path data/zhongao/tasks_hasnan/Code_zatd_xwtd/train.data.idx \
+	--train_label_path data/zhongao/tasks_hasnan/Code_zatd_xwtd/train.data.idx \
+	--train_unlabel_path data/zhongao/tasks_hasnan/Code_zatd_xwtd/train.data.idx \
+	--valid_path data/zhongao/tasks_hasnan/Code_zatd_xwtd/valid.data.idx \
+	--test_path data/zhongao/tasks_hasnan/Code_zatd_xwtd/test.data.idx \
+	--vocab_path data/zhongao/tasks_hasnan/Code_zatd_xwtd/vocab.pkl \
 	--save_dir results/tmp \
-	--rnn_type GatedGRU \
 	--vocab_size 15000 \
-	--num_classes 17
+	--num_classes 32

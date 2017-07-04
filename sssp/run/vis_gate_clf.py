@@ -36,7 +36,7 @@ def get_batch(dataset):
             pass
     return batch
 
-def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, explogger):
+def run(args, model, sess, train_dset, valid_dset, test_dset, explogger):
     with open(args.vocab_path, 'rb') as f:
         vocab = pkl.load(f)
         vocab = {int(vocab[k]): k for k in vocab}
@@ -52,9 +52,8 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
     for epoch_idx in range(args.max_epoch):
         #threaded_it_u = threaded_generator(unlabel_dset, 200)
         #threaded_it_l = threaded_generator(label_dset, 200)
-        for batch_u in unlabel_dset:
+        for batch in train_dset:
             batch_cnt += 1
-            batch_l = get_batch(label_dset)
             gen_time = time.time() - t_time
             t_time = time.time()
             #res_dict, res_str, summary = model.run_batch(sess, batch_l+batch_u[:-1], istrn=True)
@@ -64,13 +63,13 @@ def run(args, model, sess, label_dset, unlabel_dset, valid_dset, test_dset, expl
                     model.label_plh,
                     model.is_training]
 
-            gates = sess.run(model.weights, dict(zip(plhs, list(batch_l)+[True])))
+            gates = sess.run(model.weights, dict(zip(plhs, list(batch)+[True])))
             print(gates)
             print(gates.shape)
             for sidx in range(20):
-                for idx, w in enumerate(batch_l[0][sidx]):
+                for idx, w in enumerate(batch[0][sidx]):
                     print(vocab[w] + '\t', end='')
-                #for idx, w in enumerate(batch_l[1][sidx]):
+                #for idx, w in enumerate(batch[1][sidx]):
                     print('{0:.3f}\t'.format(gates[sidx][idx][0]))
                 print()
 
@@ -122,10 +121,12 @@ def main():
     explogger.write_variables(vs)
 
     # step 2: init dataset
-    label_dset = initDataset(args.train_label_path, model.prepare_data, args.batch_size)
-    unlabel_dset = initDataset(args.train_unlabel_path, model.prepare_data, args.batch_size)
-    valid_dset = initDataset(args.valid_path, model.prepare_data, args.batch_size)
-    test_dset = initDataset(args.test_path, model.prepare_data, args.batch_size)
+    get_prepare_func = utils.get_prepare_func
+    if args.task_id is not None: get_prepare_func = utils.get_prepare_func_for_certain_task
+    train_dset = initDataset(args.train_path, get_prepare_func(args), args.batch_size)
+    valid_dset = initDataset(args.valid_path, get_prepare_func(args), args.batch_size)
+    test_dset = initDataset(args.test_path, get_prepare_func(args), args.batch_size)
+
 
     # step 3: Init tensorflow
     configproto = tf.ConfigProto()
@@ -139,8 +140,7 @@ def main():
         run(args, 
                 model=model, 
                 sess=sess, 
-                label_dset=label_dset,
-                unlabel_dset=unlabel_dset,
+                train_dset=train_dset,
                 valid_dset=valid_dset,
                 test_dset=test_dset,
                 explogger=explogger)

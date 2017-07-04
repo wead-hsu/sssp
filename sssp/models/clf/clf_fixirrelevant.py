@@ -74,7 +74,16 @@ class RnnClassifier(ModelBase):
                 self._logger.debug(enc_state[0].shape)
                 self._logger.debug(enc_state[1].shape)
                 self._logger.debug(weights.shape)
-
+            elif args.rnn_type == 'GRU':
+                cell = tf.contrib.rnn.GRUCell(args.num_units)
+                if args.num_layers > 1:
+                    cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
+                _, enc_state = tf.nn.dynamic_rnn(cell=cell,
+                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
+                        dtype=tf.float32,
+                        sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
+                weights = tf.zeros(tf.shape(emb_inp)[:2])
+                enc_state = [enc_state, weights]
             self._logger.info("Encoder done")
             return enc_state
 
@@ -85,7 +94,7 @@ class RnnClassifier(ModelBase):
         
         logits = tf.contrib.layers.fully_connected(
                 inputs=enc_state,
-                num_outputs=args.num_classes,
+                num_outputs=num_classes,
                 activation_fn=None,
                 scope=scope+'fc1')
 

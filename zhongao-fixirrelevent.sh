@@ -27,7 +27,7 @@ declare -A vs     # Explicitly declare
 #vs[Code_zatd_zzxs]=15000
 #nc[Code_zatd_zafw]=3
 #vs[Code_zatd_zafw]=15000
-#
+
 nc[Code_Zasd_ybsd]=17
 vs[Code_Zasd_ybsd]=15000
 nc[Code_Zasd_qb]=3
@@ -45,20 +45,20 @@ vs[Code_zatd_zzxs]=15000
 #echo "${nc[Code_Zasd_blsd]}"
 
 
-dir="data/zhongao/tasks_hasnan/"
-save_dir="results/zhongao/gatedgru-hasnan-fixirrelevant-flattendataset-duplicate"
-for f in $(ls ${dir});
+data_dir="data/zhongao/proc/070606/tasks_hasnan_inchar"
+save_dir="results/zhongao/gru-hasnan-inchar-fixirrelevant"
+for f in $(ls ${data_dir});
 do
-	CUDA_VISIBLE_DEVICES=0 nohup python3 clf.py \
+	CUDA_VISIBLE_DEVICES=1 nohup python3 clf.py \
 		--model_path sssp.models.clf.clf_fixirrelevant \
-		--rnn_type GatedGRU \
-		--train_path ${dir}/$f/train.data.idx \
-		--train_label_path ${dir}/$f/train.data.idx \
-		--train_unlabel_path ${dir}/$f/train.data.idx \
-		--valid_path ${dir}/$f/valid.data.idx \
-		--test_path ${dir}/$f/test.data.idx \
-		--vocab_path ${dir}/$f/vocab.pkl \
+		--rnn_type GRU \
+		--train_path ${data_dir}/$f/train.data.idx \
+		--train_label_path ${data_dir}/$f/train.data.idx \
+		--train_unlabel_path ${data_dir}/$f/train.data.idx \
+		--valid_path ${data_dir}/$f/valid.data.idx \
+		--test_path ${data_dir}/$f/test.data.idx \
+		--vocab_path ${data_dir}/$f/vocab.pkl \
 		--save_dir ${save_dir}/$f \
-		--vocab_size ${vs[${f}]} \
 		--num_classes ${nc[${f}]} &
+		#--vocab_size ${vs[${f}]} 
 done

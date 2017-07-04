@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import pickle as pkl
 from sssp.utils import utils
 from sssp.config import exp_logger
 from sssp.io.datasets import initDataset
@@ -16,16 +17,27 @@ conf_dirs = ['sssp.config.conf_clf',]
 #conf_dirs = ['sssp.config.conf_clf_multilabel']
 # --------------------------------------------------------
 
-def validate(valid_dset, model, sess):
+def validate(valid_dset, model, sess, args, vocab):
     res_list = []
     threaded_it = threaded_generator(valid_dset, 200)
+    wf = open(os.path.join(args.save_dir, 'gate.log'), 'w')
     for batch in threaded_it:
-        res_dict, res_str, summary = model.run_batch(sess, batch, istrn=False)
+        res_dict, res_str, summary, gate_weights = model.run_batch(sess, batch, istrn=False)
         res_list.append(res_dict)
+
+        wf.write(str(gate_weights))
+        wf.write(str(gate_weights.shape))
+        for sidx in range(20):
+            for idx, w in enumerate(batch[0][sidx]):
+                wf.write(vocab[w] + '\t')
+                wf.write('{0:.3f}\t'.format(gate_weights[sidx][idx][0]) + '\n')
+            wf.write('\n')
+
+    wf.close()
     out_str = res_to_string(average_res(res_list))
     return out_str
 
-def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, explogger):
+def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, explogger, vocab):
     batch_cnt = 0
     res_list = []
 
@@ -40,7 +52,7 @@ def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, exp
             batch_cnt += 1
             gen_time = time.time() - t_time
             t_time = time.time()
-            res_dict, res_str, summary = model.run_batch(sess, batch, istrn=True)
+            res_dict, res_str, summary, gate_weights = model.run_batch(sess, batch, istrn=True)
             run_time = time.time() - t_time
             res_dict.update({'run_time': run_time})
             res_dict.update({'gen_time': gen_time})
@@ -54,11 +66,11 @@ def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, exp
                 explogger.message(out_str, True)
             
             if args.validate_every != -1 and batch_cnt % args.validate_every == 0:
-                out_str = validate(valid_dset, model, sess)
+                out_str = validate(valid_dset, model, sess, args, vocab)
                 explogger.message('VALIDATE: '  + out_str, True)
 
             if args.validate_every != -1 and batch_cnt % args.validate_every == 0:
-                out_str = validate(test_dset, model, sess)
+                out_str = validate(test_dset, model, sess, args, vocab)
                 explogger.message('TEST: ' + out_str, True)
 
             if batch_cnt % args.save_every == 0:
@@ -79,19 +91,24 @@ def main():
     explogger.write_args(wargs)
     explogger.file_copy(['sssp'])
 
-    # step 1: import specified model
-    module = __import__(args.model_path, fromlist=[args.model_name])
-    model_class = module.__dict__[args.model_name]
-    model = model_class(args)
-    vt, vs = model.model_setup(args)
-    explogger.write_variables(vs)
-
-    # step 2: init dataset
+    # step 1: init dataset
     get_prepare_func = utils.get_prepare_func
     if args.task_id is not None: get_prepare_func = utils.get_prepare_func_for_certain_task
     train_dset = initDataset(args.train_path, get_prepare_func(args), args.batch_size)
     valid_dset = initDataset(args.valid_path, get_prepare_func(args), args.batch_size)
     test_dset = initDataset(args.test_path, get_prepare_func(args), args.batch_size)
+
+    if args.vocab_path:
+        vocab = pkl.load(open(args.vocab_path, 'rb'))
+        args.vocab_size = max(vocab.values())+1
+        vocab = {int(vocab[k]): k for k in vocab}
+
+    # step 2: import specified model
+    module = __import__(args.model_path, fromlist=[args.model_name])
+    model_class = module.__dict__[args.model_name]
+    model = model_class(args)
+    vt, vs = model.model_setup(args)
+    explogger.write_variables(vs)
 
     # step 3: Init tensorflow
     configproto = tf.ConfigProto()
@@ -103,10 +120,12 @@ def main():
             explogger.message('Model restored from {0}'.format(args.init_from))
         else:
             tf.global_variables_initializer().run()
+
         train_and_validate(args, 
                 model=model, 
                 sess=sess, 
                 train_dset=train_dset,
                 valid_dset=valid_dset,
                 test_dset=test_dset,
-                explogger=explogger)
+                explogger=explogger,
+                vocab=vocab)

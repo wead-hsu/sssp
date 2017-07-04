@@ -44,25 +44,37 @@ class EntityNetwork(tf.contrib.rnn.RNNCell):
         return states
 
     def zero_state(self, batch_size, dtype):
-        return [tf.tile(tf.expand_dims(key, 0), [batch_size, 1]) for key in self.keys]
+        list_h_init = [tf.tile(tf.expand_dims(key, 0), [batch_size, 1]) for key in self.keys]
+        list_g_init = [tf.zeros([batch_size, 1]) for key in self.keys]
+        list_init = [list_h_init, list_g_init]
+        return list_init
     
     @property
     def state_size(self):
-        return [self.mem_sz for _ in range(self.m)]
+        list_h_size = [self.mem_sz for _ in range(self.m)]
+        list_g_size = [1 for _ in range(self.m)]
+        list_size = [list_h_size, list_g_size]
+        return list_size
 
     @property
     def output_size(self):
-        return [self.mem_sz for _ in range(self.m)]
+        list_h_size = [self.mem_sz for _ in range(self.m)]
+        list_g_size = [1 for _ in range(self.m)]
+        list_size = [list_h_size, list_g_size]
+        return list_size
 
     def _mask_step(self, states_tm1, inputs):
         x_t, m_t = inputs
         states = self._step(states_tm1, x_t)
-        states = [tf.where(tf.equal(m_t, 1), states[i], states_tm1[i]) for i in range(self.m)]
-        return states
+        list_h = [tf.where(tf.equal(m_t, 1), states[0][i], states_tm1[0][i]) for i in range(self.m)]
+        list_g = [tf.where(tf.equal(m_t, 1), states[1][i], states_tm1[1][i]) for i in range(self.m)]
+        list_new_state = [list_h, list_g]
+        return list_new_state
 
     def _step(self, states_tm1, inp_t):
-        new_states = []
-        for block_id, h in enumerate(states_tm1):
+        list_new_h = []
+        list_new_g = []
+        for block_id, h in enumerate(states_tm1[0]):
             content_g = tf.reduce_sum(tf.multiply(inp_t, h), axis=[1])
             address_g = tf.reduce_sum(tf.multiply(inp_t, 
                 tf.expand_dims(self.keys[block_id], 0)), axis=[1])
@@ -73,8 +85,9 @@ class EntityNetwork(tf.contrib.rnn.RNNCell):
             candidate = self.activation(h_component + w_component + s_component)
             new_h = h + tf.multiply(tf.expand_dims(g, -1), candidate)
             new_h_norm = tf.nn.l2_normalize(new_h, -1)
-            new_states.append(new_h_norm)
-        return new_states
+            list_new_h.append(new_h_norm)
+            list_new_g.append(tf.expand_dims(g, 1))
+        return [list_new_h, list_new_g]
 
     def __call__(self, inputs, states):
         """ change order """
@@ -109,6 +122,6 @@ if __name__ == '__main__':
     sess.run(tf.global_variables_initializer())
     r0, r1 = sess.run([a, b])
     for x in r0:
-        print(x.shape)
+        print([j.shape for j in x])
     for x in r1:
-        print(x.shape)
+        print([j.shape for j in x])
