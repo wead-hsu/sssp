@@ -23,7 +23,7 @@ class RnnClassifier(ModelBase):
     def _create_placeholders(self, args):
         self.input_plh = tf.placeholder(
                 dtype=tf.int64,
-                shape=[None, None],
+                shape=[None, None if args.fix_sent_len <=0 else args.fix_sent_len],
                 name='input_plh')
 
         self.mask_plh = tf.placeholder(
@@ -61,7 +61,7 @@ class RnnClassifier(ModelBase):
         with tf.variable_scope(scope_name):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
             
-            if args.rnn_type == 'LSTM':
+            if args.encoder_type == 'LSTM':
                 cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
@@ -74,7 +74,7 @@ class RnnClassifier(ModelBase):
                 else:
                     enc_state = enc_state[-1][-1]
                 weights = tf.zeros(tf.shape(emb_inp)[:2])
-            elif args.rnn_type == 'GRU':
+            elif args.encoder_type == 'GRU':
                 cell = tf.contrib.rnn.GRUCell(args.num_units)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
@@ -84,7 +84,7 @@ class RnnClassifier(ModelBase):
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.rnn_type == 'BiGRU':
+            elif args.encoder_type == 'BiGRU':
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 _, enc_state = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
@@ -92,9 +92,9 @@ class RnnClassifier(ModelBase):
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),
                         dtype=tf.float32)
                 enc_state = tf.concat(enc_state, axis=1)
-                weights = tf.zeros(tf.shape(emb_inp)[:2])
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.rnn_type == 'BiGRU+maxpooling':
+            elif args.encoder_type == 'BiGRU+maxpooling':
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 enc_states, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
@@ -103,9 +103,9 @@ class RnnClassifier(ModelBase):
                         dtype=tf.float32)
                 enc_state = tf.concat(enc_states, axis=2)
                 enc_state = tf.reduce_max(enc_state, axis=1)
-                weights = tf.zeros(tf.shape(emb_inp)[:2])
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.rnn_type == 'GatedGRU':
+            elif args.encoder_type == 'GatedGRU':
                 from sssp.models.layers.gated_gru import GatedGRU
                 """
                 enc_layer = GatedGRU(emb_inp.shape[2], args.num_units)
@@ -122,7 +122,7 @@ class RnnClassifier(ModelBase):
                 self.gate_weights = weights
                 self._logger.debug(enc_state.shape)
                 self._logger.debug(weights.shape)
-            elif args.rnn_type == 'GatedCtxGRU':
+            elif args.encoder_type == 'GatedCtxGRU':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
 
                 inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
@@ -156,7 +156,7 @@ class RnnClassifier(ModelBase):
                 self.gate_weights = weights
                 weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
                 #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-            elif args.rnn_type == 'tagGatedGRU':
+            elif args.encoder_type == 'tagGatedGRU':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
                 sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
                 cell_tag = tf.contrib.rnn.GRUCell(args.num_units)
@@ -171,7 +171,7 @@ class RnnClassifier(ModelBase):
                 enc_state, weights = gatedctxgru_layer.forward(emb_inp, outputs, msk, return_final=True)
                 self.gate_weights = weights
                 weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            elif args.rnn_type == 'Tag=bigru;Gatedgru=bwctx+tag':
+            elif args.encoder_type == 'Tag=bigru;Gatedgru=bwctx+tag':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
                 sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
                 
@@ -220,7 +220,7 @@ class RnnClassifier(ModelBase):
                         return_final=True)
                 self.gate_weights = weights
                 #weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            elif args.rnn_type == 'EntityNetwork':
+            elif args.encoder_type == 'EntityNetwork':
                 from sssp.models.layers.entity_network import EntityNetwork
                 cell = tf.contrib.rnn.GRUCell(args.num_units)
                 if args.num_layers > 1:
@@ -242,8 +242,36 @@ class RnnClassifier(ModelBase):
                 enc_state = final_state[0][0]
                 weights = output[1][0]
                 self.gate_weights = weights
+            elif args.encoder_type == 'CNN':
+                filter_shape_1 = [args.filter_size, args.embd_dim, 1, args.num_filters]
+                filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
+
+                #initialize word embedding, task embedding parameters, sentence embedding matrix
+                emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                emb_inp = tf.expand_dims(emb_inp, -1)
+
+                #initialize convolution, pooling parameters
+                W1 = tf.Variable(tf.truncated_normal(filter_shape_1, stddev=0.1), name="W1")
+                b1 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b1")
+                W2 = tf.Variable(tf.truncated_normal(filter_shape_2, stddev=0.1), name="W2")
+                b2 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b2")
+
+                #conv1+pool1
+                conv1 = tf.nn.conv2d(emb_inp, W1, strides=[1, 1, 1, 1], padding="VALID", name="conv1")
+                h1 = tf.nn.relu(tf.nn.bias_add(conv1, b1), name="relu1")
+                pooled1 = tf.nn.max_pool(h1, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='VALID', name="pool1")
+
+                #conv2+pool2
+                conv2 = tf.nn.conv2d(pooled1,W2,strides=[1, 1, 1, 1],padding="VALID",name="conv2")
+                h2 = tf.nn.relu(tf.nn.bias_add(conv2, b2), name="relu2")
+                pooled2 = tf.nn.max_pool(h2, ksize=[1, h2.shape[1], 1, 1],strides=[1, 1, 1, 1],padding='VALID',name="pool2")
+                h_pool_flat = tf.reshape(pooled2, [-1, args.num_filters])
+                enc_state = h_pool_flat
+                self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
+                self.gate_weights = weights
             else:
-                raise 'RNN type {} not supported'.format(args.rnn_type)
+                raise 'Encoder type {} not supported'.format(args.encoder_type)
 
             self._logger.info("Encoder done")
             return enc_state, weights
@@ -283,6 +311,8 @@ class RnnClassifier(ModelBase):
             self.loss_reg_diff = tf.reduce_mean(self.loss_reg_diff)
             self.loss_reg_sharp = tf.reduce_sum(gate_weights * (1-gate_weights), axis=1)
             self.loss_reg_sharp = tf.reduce_mean(self.loss_reg_sharp)
+
+            print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', type(args.fixirrelevant))
 
             if args.fixirrelevant == False:
                 logits = self._create_fclayers(enc_state, args.num_classes, 'fclayers', args)
@@ -345,9 +375,10 @@ class RnnClassifier(ModelBase):
                     ]
 
             feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, istrn]])
-            fetch = [self.merged, self.gate_weights] + [t[1] for t in fetch_dict] + [self.train_op]
+            fetch_nonscalar = [self.merged, self.gate_weights, self.pred]
+            fetch = fetch_nonscalar + [t[1] for t in fetch_dict] + [self.train_op]
             res = sess.run(fetch, feed_dict)
-            res_dict = dict([[fetch_dict[i][0], res[i+2]] for i in range(len(fetch_dict))])
+            res_dict = dict([[fetch_dict[i][0], res[i+len(fetch_nonscalar)]] for i in range(len(fetch_dict))])
             res_str = res_to_string(res_dict)
         else:
             fetch_dict = [
@@ -360,11 +391,12 @@ class RnnClassifier(ModelBase):
                     ]
 
             feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training, istrn]])
-            fetch = [self.merged, self.gate_weights] + [t[1] for t in fetch_dict]
+            fetch_nonscalar = [self.merged, self.gate_weights, self.pred]
+            fetch = fetch_nonscalar + [t[1] for t in fetch_dict]
             res = sess.run(fetch, feed_dict)
-            res_dict = dict([[fetch_dict[i][0], res[i+2]] for i in range(len(fetch_dict))])
+            res_dict = dict([[fetch_dict[i][0], res[i+len(fetch_nonscalar)]] for i in range(len(fetch_dict))])
             res_str = res_to_string(res_dict)
-        return res_dict, res_str, res[0], res[1]
+        return res_dict, res_str, res[0], res[1: len(fetch_nonscalar)]
     
     def classify(self, sess, sent, mask):
         feed_dict = {self.input_plh: sent, self.mask_plh: mask, self.is_training: False}

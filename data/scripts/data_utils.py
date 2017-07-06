@@ -1548,6 +1548,68 @@ def proc_semeval2010task8():
     with open(os.path.join(save_dir, 'label2idx.pkl'), 'wb') as f:
         pkl.dump(label2idx, f)
 
+def proc_zhongao_zzxs(inchar):
+    def proc_zhongao_by_criteria_help():
+        ifn = '../zhongao/raw/zzxs/070704.xlsx'
+        df = pandas.read_excel(ifn)
+        label = df['标签1']
+        txt = df['脱敏案情']
+        shotlines = []
+        for i in range(label.shape[0]):
+            label_i = label.iloc[i].tolist()
+            txt_i = txt.iloc[i]
+            if type(txt_i) != str:
+                continue
+            shotlines.append([txt_i, str(label_i)])
+        return shotlines
+    
+    def data_to_idx(samples, save_dir):
+        samples = [samples[i] for i in np.random.permutation(len(samples))]
+        list_portion = [0.83, 0.06, 0.07]
+        divide_pos = [int(sum(list_portion[:i])*len(samples)) for i in range(len(list_portion)+1)]
+        splits = [samples[divide_pos[i]: divide_pos[i+1]] for i in range(len(list_portion))]
+        
+        for s in splits[0]:
+            if type(s[0]) != str:
+                print(s)
+        words = [w for s in splits[0] for w in (s[0])]
+        if not inchar: words = [w for s in splits[0] for w in list(zip(*thuseg.cut(s[0])))[0]]
+        vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=15000)
+        classes = set([s[1] for s in samples])
+        class_map = dict([[v, idx+1] for idx, v in enumerate(sorted(classes)) if v != 'nan'])
+        class_map['nan'] = 0
+        logger.info(class_map)
+        logger.info(vocab_size)
+        
+        def save_data(samples, vocab, ofn):
+            UNK_ID = vocab[UNK_TOKEN]
+            with open(ofn, 'w') as f:
+                for s in samples:
+                    words = [w for w in s[0]]
+                    if not inchar: words = list(zip(*thuseg.cut(s[0])))[0]
+                    word_idx = [str(vocab.get(w, UNK_ID)) for w in words]
+                    f.write(str(class_map[s[1]]))
+                    f.write('\t' + ' '.join(word_idx))
+                    f.write('\n')
+    
+        names = ['train.data.idx', 'valid.data.idx', 'test.data.idx']
+        for i in range(3):
+            data = splits[i]
+            name = names[i]
+            save_data(data, vocab, os.path.join(save_dir, name))
+        with open(os.path.join(save_dir, 'vocab.pkl'), 'wb') as f:
+            pkl.dump(vocab, f)
+        with open(os.path.join(save_dir, 'class_map.pkl'), 'wb') as f:
+            pkl.dump(class_map, f)
+
+
+    np.random.seed(0)
+    save_dir = '../zhongao/proc/zzxs/070704/inchar'
+    if not inchar: save_dir = '../zhongao/proc/zzxs/070704/inword'
+    samples = proc_zhongao_by_criteria_help()
+    logger.info('task: {}, number of samples: {}'.format('zzxs', len(samples)))
+    data_to_idx(samples, save_dir)
+  
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
@@ -1568,4 +1630,6 @@ if __name__ == '__main__':
     #proc_zhongao_inchar_by_criteria()
     #proc_zhongaonan_inchar_by_criteria()
     #proc_zhongaonan_inchar_by_criteria_for_hierachy()
-    proc_semeval2010task8()
+    #proc_semeval2010task8()
+    proc_zhongao_zzxs(inchar=True)
+    proc_zhongao_zzxs(inchar=False)

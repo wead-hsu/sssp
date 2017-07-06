@@ -43,6 +43,18 @@ def average_res(res_list):
         avg[k] = np.mean([res[k] for res in res_list])
     return avg
 
+def confusion_matrix_to_string(matrix, labels):
+    res = '\t'
+    res += '\t'.join(labels) + '\n'
+    for idx, l in enumerate(labels):
+        res += l + '\t' + '\t'.join([str(f) for f in matrix[idx]]) + '\n'
+    return res
+
+def get_prepare_clf_func_help(args):
+    func = get_prepare_func
+    if args.task_id is not None: func = get_prepare_func_for_certain_task
+    return func
+
 def get_prepare_func_for_certain_task(args):
     num_tasks = len(args.list_num_classes.split(','))
     def prepare_data(raw_inp):
@@ -55,6 +67,7 @@ def get_prepare_func_for_certain_task(args):
         def proc(sents):
             sent_lens = [len(s) for s in sents]
             max_sent_len = min(args.max_sent_len, max(sent_lens))
+            if args.fix_sent_len > 0: max_sent_len = args.fix_sent_len - 1
             batch_size = len(sents)
             inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
             tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
@@ -82,15 +95,17 @@ def get_prepare_func(args):
         
         def proc(sents):
             sent_lens = [len(s) for s in sents]
-            max_sent_len = max(sent_lens)
+            max_sent_len = min(args.max_sent_len, max(sent_lens))
+            if args.fix_sent_len > 0: max_sent_len = args.fix_sent_len - 1
             batch_size = len(sents)
             inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int64')
             tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int64')
             msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
             for idx, s in enumerate(sents):
-                inp_np[idx][1:len(s)+1] = s
-                tgt_np[idx][:len(s)] = s
-                msk_np[idx][:len(s)+1] = 1
+                len_s = min(max_sent_len, len(s))
+                inp_np[idx][1:len_s+1] = s[:len_s]
+                tgt_np[idx][:len_s] = s[:len_s]
+                msk_np[idx][:len_s+1] = 1
             return inp_np, tgt_np, msk_np
         
         inp = proc(inp)
@@ -111,6 +126,7 @@ def get_prepare_reg_func_for_certain_task(args):
         def proc(sents):
             sent_lens = [len(s) for s in sents]
             max_sent_len = min(args.max_sent_len, max(sent_lens))
+            if args.fix_sent_len > 0: max_sent_len = args.fix_sent_len - 1
             batch_size = len(sents)
             inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
             tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int32')
@@ -138,15 +154,17 @@ def get_prepare_reg_func(args):
         
         def proc(sents):
             sent_lens = [len(s) for s in sents]
-            max_sent_len = max(sent_lens)
+            max_sent_len = min(args.max_sent_len, max(sent_lens))
+            if args.fix_sent_len > 0: max_sent_len = args.fix_sent_len
             batch_size = len(sents)
             inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int64')
             tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int64')
             msk_np = np.zeros([batch_size, max_sent_len+1], dtype='float32')
             for idx, s in enumerate(sents):
-                inp_np[idx][1:len(s)+1] = s
-                tgt_np[idx][:len(s)] = s
-                msk_np[idx][:len(s)+1] = 1
+                len_s = min(max_sent_len, len(s))
+                inp_np[idx][1:len_s+1] = s[:len_s]
+                tgt_np[idx][:len_s] = s[:len_s]
+                msk_np[idx][:len_s+1] = 1
             return inp_np, tgt_np, msk_np
         
         inp = proc(inp)
