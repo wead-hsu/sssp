@@ -1548,7 +1548,7 @@ def proc_semeval2010task8():
     with open(os.path.join(save_dir, 'label2idx.pkl'), 'wb') as f:
         pkl.dump(label2idx, f)
 
-def proc_zhongao_zzxs(inchar):
+def proc_zhongao_zzxs(inchar, cv_idx):
     def proc_zhongao_by_criteria_help():
         ifn = '../zhongao/raw/zzxs/070704.xlsx'
         df = pandas.read_excel(ifn)
@@ -1565,7 +1565,8 @@ def proc_zhongao_zzxs(inchar):
     
     def data_to_idx(samples, save_dir):
         samples = [samples[i] for i in np.random.permutation(len(samples))]
-        list_portion = [0.83, 0.06, 0.07]
+        samples = samples[int(len(samples) * 0.1 * cv_idx):] + samples[:int(len(samples) * 0.1 * cv_idx)]
+        list_portion = [0.80, 0.10, 0.10]
         divide_pos = [int(sum(list_portion[:i])*len(samples)) for i in range(len(list_portion)+1)]
         splits = [samples[divide_pos[i]: divide_pos[i+1]] for i in range(len(list_portion))]
         
@@ -1581,6 +1582,7 @@ def proc_zhongao_zzxs(inchar):
         logger.info(class_map)
         logger.info(vocab_size)
         
+        os.mkdir(save_dir)
         def save_data(samples, vocab, ofn):
             UNK_ID = vocab[UNK_TOKEN]
             with open(ofn, 'w') as f:
@@ -1604,8 +1606,8 @@ def proc_zhongao_zzxs(inchar):
 
 
     np.random.seed(0)
-    save_dir = '../zhongao/proc/zzxs/070704/inchar'
-    if not inchar: save_dir = '../zhongao/proc/zzxs/070704/inword'
+    save_dir = '../zhongao/proc/zzxs/070704/inchar_cv{}'.format(cv_idx)
+    if not inchar: save_dir = '../zhongao/proc/zzxs/070704/inword_cv{}'.format(cv_idx)
     samples = proc_zhongao_by_criteria_help()
     logger.info('task: {}, number of samples: {}'.format('zzxs', len(samples)))
     data_to_idx(samples, save_dir)
@@ -1631,5 +1633,5 @@ if __name__ == '__main__':
     #proc_zhongaonan_inchar_by_criteria()
     #proc_zhongaonan_inchar_by_criteria_for_hierachy()
     #proc_semeval2010task8()
-    proc_zhongao_zzxs(inchar=True)
-    proc_zhongao_zzxs(inchar=False)
+    for i in range(10): proc_zhongao_zzxs(inchar=True, cv_idx=i)
+    for i in range(10): proc_zhongao_zzxs(inchar=False, cv_idx=i)

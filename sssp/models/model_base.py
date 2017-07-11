@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.core.protobuf import saver_pb2
 import numpy as np
 import pickle
-from sssp.models.async_optimizer import AsyncAdamOptimizer
+#from sssp.models.async_optimizer import AsyncAdamOptimizer
 
 class ModelBase(object):
     def __init__(self):

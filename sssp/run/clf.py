@@ -99,7 +99,7 @@ def train_and_validate(args, model, sess, train_dset, valid_dset, test_dset, exp
                 out_str = validate(test_dset, model, sess, args, vocab, class_map)
                 explogger.message('TEST: ' + out_str, True)
 
-            if batch_cnt % args.save_every == 0:
+            if args.save_every != -1 and batch_cnt % args.save_every == 0:
                 save_fn = os.path.join(args.save_dir, args.log_prefix)
                 explogger.message("Saving checkpoint model: {} ......".format(args.save_dir))
                 model.saver.save(sess, save_fn, 
