@@ -88,7 +88,7 @@ class RnnClassifier(ModelBase):
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 _, enc_state = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
-                        inputs=emb_inp,
+                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),
                         dtype=tf.float32)
                 enc_state = tf.concat(enc_state, axis=1)
@@ -98,7 +98,7 @@ class RnnClassifier(ModelBase):
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 enc_states, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
-                        inputs=emb_inp,
+                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),
                         dtype=tf.float32)
                 enc_state = tf.concat(enc_states, axis=2)
@@ -125,7 +125,6 @@ class RnnClassifier(ModelBase):
             elif args.encoder_type == 'GatedCtxGRU':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
 
-                inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
                 def _reverse(input_, seq_lengths, seq_dim, batch_dim):
                     if seq_lengths is not None:
                         return array_ops.reverse_sequence(
@@ -140,7 +139,8 @@ class RnnClassifier(ModelBase):
                 cell_bw = tf.contrib.rnn.GRUCell(args.num_units)
                 with tf.variable_scope("bw") as bw_scope:
                   inputs_reverse = _reverse(
-                          inp, seq_lengths=sequence_length,
+                          tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
+                          seq_lengths=sequence_length,
                           seq_dim=time_dim, batch_dim=batch_dim)
                   tmp, output_state_bw = tf.nn.dynamic_rnn(
                           cell=cell_bw, inputs=inputs_reverse, sequence_length=sequence_length,
@@ -151,8 +151,9 @@ class RnnClassifier(ModelBase):
                         tmp, seq_lengths=sequence_length,
                         seq_dim=time_dim, batch_dim=batch_dim)
             
-                enc_layer = GatedGRU(inp.shape[2], args.num_units, args.num_units)
-                enc_state, weights = enc_layer.forward(inp, output_bw, msk, return_final=True)
+                enc_layer = GatedGRU(emb_inp.shape[2], args.num_units, args.num_units)
+                enc_state, weights = enc_layer.forward(
+                          tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)), output_bw, msk, return_final=True)
                 self.gate_weights = weights
                 weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
                 #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
@@ -162,7 +163,9 @@ class RnnClassifier(ModelBase):
                 cell_tag = tf.contrib.rnn.GRUCell(args.num_units)
                 with tf.variable_scope("tagrnn") as scope:
                     outputs, final_state = tf.nn.dynamic_rnn(
-                            cell=cell_tag, inputs=emb_inp, sequence_length=sequence_length,
+                            cell=cell_tag, 
+                            inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
+                            sequence_length=sequence_length,
                             dtype=tf.float32,
                             scope=scope)
                 
@@ -178,7 +181,7 @@ class RnnClassifier(ModelBase):
                 tag_states, _ = tf.nn.bidirectional_dynamic_rnn(
                         cell_fw=tf.contrib.rnn.GRUCell(100),
                         cell_bw=tf.contrib.rnn.GRUCell(100),
-                        inputs=emb_inp,
+                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),
                         dtype=tf.float32)
                 tag_states = tf.concat(tag_states, axis=2)
@@ -200,7 +203,7 @@ class RnnClassifier(ModelBase):
                             seq_dim=time_dim, batch_dim=batch_dim)
                     tmp, output_state_bw = tf.nn.dynamic_rnn(
                             cell=tf.contrib.rnn.GRUCell(100), 
-                            inputs=inputs_reverse, 
+                            inputs=tf.nn.dropout(inputs_reverse, tf.where(self.is_training, args.keep_rate, 1.0)),
                             sequence_length=sequence_length,
                             dtype=tf.float32,
                             scope=bw_scope)
@@ -215,7 +218,7 @@ class RnnClassifier(ModelBase):
                         num_units=args.num_units)
                 enc_state, weights = enc_layer.forward(
                         inp=emb_inp, 
-                        ctx=tf.concat([output_bw, emb_inp], axis=2),
+                        ctx=tf.nn.dropout(tf.concat([output_bw, emb_inp], axis=2), tf.where(self.is_training, args.keep_rate, 1.0)),
                         msk=msk, 
                         return_final=True)
                 self.gate_weights = weights
@@ -236,7 +239,7 @@ class RnnClassifier(ModelBase):
                         memory_size=args.num_units,
                         keys=keys)
                 output, final_state = tf.nn.dynamic_rnn(cell=cell,
-                        inputs=enc_states,
+                        inputs=tf.nn.dropout(enc_states, tf.where(self.is_training, args.keep_rate, 1.0)),
                         dtype=tf.float32,
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 enc_state = final_state[0][0]
@@ -249,6 +252,7 @@ class RnnClassifier(ModelBase):
                 #initialize word embedding, task embedding parameters, sentence embedding matrix
                 emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
                 emb_inp = tf.expand_dims(emb_inp, -1)
+                #emb_inp = tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)) # dropout is bad
 
                 #initialize convolution, pooling parameters
                 W1 = tf.Variable(tf.truncated_normal(filter_shape_1, stddev=0.1), name="W1")
@@ -258,6 +262,86 @@ class RnnClassifier(ModelBase):
 
                 #conv1+pool1
                 conv1 = tf.nn.conv2d(emb_inp, W1, strides=[1, 1, 1, 1], padding="VALID", name="conv1")
+                h1 = tf.nn.relu(tf.nn.bias_add(conv1, b1), name="relu1")
+                pooled1 = tf.nn.max_pool(h1, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='VALID', name="pool1")
+
+                #conv2+pool2
+                conv2 = tf.nn.conv2d(pooled1,W2,strides=[1, 1, 1, 1],padding="VALID",name="conv2")
+                h2 = tf.nn.relu(tf.nn.bias_add(conv2, b2), name="relu2")
+                pooled2 = tf.nn.max_pool(h2, ksize=[1, h2.shape[1], 1, 1], strides=[1, 1, 1, 1],padding='VALID',name="pool2")
+
+                h_pool_flat = tf.reshape(pooled2, [-1, args.num_filters])
+                enc_state = h_pool_flat
+                self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
+                self.gate_weights = weights
+            elif args.encoder_type == 'CNN3layer':
+                filter_shape_1 = [args.filter_size, args.embd_dim, 1, args.num_filters]
+                filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
+                filter_shape_3 = [args.filter_size, 1, args.num_filters, args.num_filters]
+
+                #initialize word embedding, task embedding parameters, sentence embedding matrix
+                emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                emb_inp = tf.expand_dims(emb_inp, -1)
+                #emb_inp = tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)) # dropout is bad
+
+                #initialize convolution, pooling parameters
+                W1 = tf.Variable(tf.truncated_normal(filter_shape_1, stddev=0.1), name="W1")
+                b1 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b1")
+                W2 = tf.Variable(tf.truncated_normal(filter_shape_2, stddev=0.1), name="W2")
+                b2 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b2")
+                W3 = tf.Variable(tf.truncated_normal(filter_shape_3, stddev=0.1), name="W3")
+                b3 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b3")
+
+                #conv1+pool1
+                conv1 = tf.nn.conv2d(emb_inp, W1, strides=[1, 1, 1, 1], padding="VALID", name="conv1")
+                h1 = tf.nn.relu(tf.nn.bias_add(conv1, b1), name="relu1")
+                pooled1 = tf.nn.max_pool(h1, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='VALID', name="pool1")
+
+                #conv2+pool2
+                conv2 = tf.nn.conv2d(pooled1, W2, strides=[1, 1, 1, 1], padding="VALID",name="conv2")
+                h2 = tf.nn.relu(tf.nn.bias_add(conv2, b2), name="relu2")
+                pooled2 = tf.nn.max_pool(h2, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1],padding='VALID',name="pool2")
+                print(h2.shape)
+                print(pooled2.shape)
+
+                #conv3+pool3
+                conv3 = tf.nn.conv2d(pooled2, W3, strides=[1, 1, 1, 1], padding="VALID",name="conv3")
+                h3 = tf.nn.relu(tf.nn.bias_add(conv3, b3), name="relu3")
+                pooled3 = tf.nn.max_pool(h3, ksize=[1, h3.shape[1], 1, 1], strides=[1, 1, 1, 1],padding='VALID',name="pool2")
+                print(h3.shape)
+                print(pooled3.shape)
+
+                h_pool_flat = tf.reshape(pooled3, [-1, args.num_filters])
+                enc_state = h_pool_flat
+                self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
+                self.gate_weights = weights
+            elif args.encoder_type == 'BiGRU+CNN':
+                cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
+                enc_states, enc_state = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
+                        cell_bw=cell, 
+                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
+                        sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)),
+                        dtype=tf.float32)
+                enc_states = tf.concat(enc_states, axis=2)
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
+                self.gate_weights = weights
+
+                filter_shape_1 = [args.filter_size, args.num_units, 1, args.num_filters]
+                filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
+
+                enc_states = tf.expand_dims(enc_states, -1)
+                enc_states = tf.nn.dropout(enc_states, tf.where(self.is_training, args.keep_rate, 1.0))
+
+                #initialize convolution, pooling parameters
+                W1 = tf.Variable(tf.truncated_normal(filter_shape_1, stddev=0.1), name="W1")
+                b1 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b1")
+                W2 = tf.Variable(tf.truncated_normal(filter_shape_2, stddev=0.1), name="W2")
+                b2 = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b2")
+
+                #conv1+pool1
+                conv1 = tf.nn.conv2d(enc_states, W1, strides=[1, 1, 1, 1], padding="VALID", name="conv1")
                 h1 = tf.nn.relu(tf.nn.bias_add(conv1, b1), name="relu1")
                 pooled1 = tf.nn.max_pool(h1, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='VALID', name="pool1")
 
