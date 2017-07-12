@@ -1612,6 +1612,96 @@ def proc_zhongao_zzxs(inchar, cv_idx):
     logger.info('task: {}, number of samples: {}'.format('zzxs', len(samples)))
     data_to_idx(samples, save_dir)
   
+def proc_googleextration():
+    rawfiles_dir = '../google-extraction/raw'
+    save_dir = '../google-extraction/proc'
+    rawfilenames = ['../google-extraction/raw/20130403-institution.json',
+            '../google-extraction/raw/20130403-place_of_birth.json',
+            '../google-extraction/raw/20131104-date_of_birth.json',
+            '../google-extraction/raw/20131104-education-degree.json',
+            '../google-extraction/raw/20131104-place_of_death.json']
+
+    labels = ['institution',
+            'place_of_birth',
+            'date_of_birth',
+            'education',
+            'place_of_death',]
+
+    samples = OrderedDict()
+    for i in range(5):
+        fn = rawfilenames[i]
+        label = labels[i]
+        with open(fn, 'r') as f:
+            tmp_samples = [json.loads(l.replace('\\', '')) for l in f]
+            tmp_x = [s['evidences'][0]['snippet'] for s in tmp_samples]
+            samples[label] = tmp_x
+            logger.info('Labelname: {} Number of samples: {}'.format(label, len(tmp_x)))
+    
+    samples = {k: samples[k][:10000] for k in samples}
+
+    def split_dict_samples(samples, list_split_portion):
+        num_splits = len(list_split_portion)
+        splits = [{} for i in range(num_splits)]
+        for k in samples:
+            num_samples = len(samples[k])
+            list_threshold = [int(sum(list_split_portion[:i])*num_samples) for i in range(4)]
+            split_k = [samples[k][list_threshold[i]: list_threshold[i+1]] for i in range(3)]
+            for i in range(num_splits):
+                splits[i][k] = split_k[i]
+        return splits
+    
+    # split samples into [train, valid, test] {{{
+    train, valid, test = split_dict_samples(samples, list_split_portion=[0.90, 0.05, 0.05])
+    for k in samples:
+        logger.info('len(train[{}])={}'.format(k, len(train[k])))
+        logger.info('len(valid[{}])={}'.format(k, len(valid[k])))
+        logger.info('len(test[{}])={}'.format(k, len(test[k])))
+
+    train_flt = [(x, y) for y in train for x in train[y]]
+    valid_flt = [(x, y) for y in valid for x in valid[y]]
+    test_flt = [(x, y) for y in test for x in test[y]]
+    # }}}
+
+    # build vocab {{{
+    words = [w for sample in train_flt for w in wt(sample[0])]
+    vocab, vocab_size = build_vocab(Counter(words), max_vocab_size=20000)
+    label_dict = {labels[idx]: idx for idx in range(5)}
+    # }}}
+
+    def save_data(data_list, save_dir, vocab, label_dict):
+        fns = ['train', 'valid', 'test', 'labeled', 'unlabeled']
+        UNK_ID = vocab[UNK_TOKEN]
+        #os.mkdir(save_dir)
+        for i in range(5):
+            with open(os.path.join(save_dir, fns[i] + '.data.idx'), 'w') as f:
+                for sample in data_list[i]:
+                    words_tmp = wt(sample[0])
+                    label_tmp = sample[1]
+                    widx = [str(vocab.get(w, UNK_ID)) for w in words_tmp]
+                    lidx = str(label_dict[label_tmp])
+                    f.write(lidx)
+                    f.write('\t')
+                    f.write(' '.join(widx))
+                    f.write('\n')
+        with open(os.path.join(save_dir, 'vocab.pkl'), 'wb') as f:
+            pkl.dump(vocab, f)
+        with open(os.path.join(save_dir, 'label.pkl'), 'wb') as f:
+            pkl.dump(label_dict, f)
+    
+    # create dataset with different number of labeled samples {{{
+    for label_portion in [0.05, 0.1, 0.2, 0.4]:
+        labeled, unlabeled = split_dict_samples(train, list_split_portion=[label_portion, 1-label_portion])
+        labeled_flt = [(x, y) for y in labeled for x in labeled[y]]
+        unlabeled_flt = [(x, y) for y in labeled for x in unlabeled[y]]
+        logger.info('labeled_portion: {}'.format(label_portion))
+        for k in samples:
+            logger.info('len(labeled[{}])={}'.format(k, len(labeled[k])))
+            logger.info('len(unlabeled[{}])={}'.format(k, len(unlabeled[k])))
+
+        data_list = [train_flt, valid_flt, test_flt, labeled_flt, unlabeled_flt]
+        save_data(data_list, os.path.join(save_dir, str(label_portion)), vocab, label_dict)
+    # }}}
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
@@ -1635,3 +1725,4 @@ if __name__ == '__main__':
     #proc_semeval2010task8()
     for i in range(10): proc_zhongao_zzxs(inchar=True, cv_idx=i)
     for i in range(10): proc_zhongao_zzxs(inchar=False, cv_idx=i)
+    #proc_googleextration()
