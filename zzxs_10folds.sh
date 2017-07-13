@@ -11,14 +11,14 @@ do
 	    --test_path ${save_dir}${i}/test.data.idx \
 	    --vocab_path ${save_dir}${i}/vocab.pkl \
 	    --labels_path ${save_dir}${i}/class_map.pkl \
-	    --save_dir results/zhongao/zzxs/cnn3layer-numfilter_60-char-cv-duplicate/${i} \
+	    --save_dir results/zhongao/zzxs/cnn3layer-numfilter_30-char-cv/${i} \
 	    --encoder_type "CNN3layer" \
 	    --num_classes 8 \
 	    --validate_every 100\
 	    --max_epoch 100 \
 	    --save_every -1 \
 	    --fix_sent_len 300 \
-	    --num_filters 60 \
+	    --num_filters 30 \
 	    #--filter_size 6 \
 	    #--fixirrelevant \
 	    #--init_from results/tmp4/rnn_test-16000

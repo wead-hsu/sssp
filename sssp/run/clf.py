@@ -46,8 +46,8 @@ def validate(valid_dset, model, sess, args, vocab, class_map):
         inp = [[vocab[idx] for idx in s if idx != 0] for s in batch[0]]
         
         for i in range(batch_size):
-            rf.write(pred[i] + '\t')
-            rf.write(tgt[i] + '\t')
+            rf.write(str(pred[i]) + '\t')
+            rf.write(str(tgt[i]) + '\t')
             rf.write(''.join(inp[i]) + '\n')
 
     wf.close()
@@ -126,8 +126,11 @@ def main():
     vocab = pkl.load(open(args.vocab_path, 'rb'))
     args.vocab_size = max(vocab.values())+1
     vocab = {int(vocab[k]): k for k in vocab}
-    class_map = pkl.load(open(args.labels_path, 'rb'))
-    class_map = dict([[class_map[k], k.strip()] for k in class_map])
+    if args.labels_path:
+        class_map = pkl.load(open(args.labels_path, 'rb'))
+        class_map = dict([[class_map[k], k.strip()] for k in class_map])
+    else:
+        class_map = dict([[k, str(k)] for k in range(args.num_classes)])
 
     # step 2: import specified model
     module = __import__(args.model_path, fromlist=[args.model_name])

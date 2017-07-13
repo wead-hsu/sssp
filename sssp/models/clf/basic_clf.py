@@ -354,6 +354,33 @@ class RnnClassifier(ModelBase):
                 self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
+
+            elif args.encoder_type == 'GRU+selfatt':
+                def cal_attention(states, msk):
+                    # context is in the layers
+                    logits_att = tf.contrib.layers.fully_connected(inputs=states,
+                            num_outputs=args.num_units,
+                            activation_fn=tf.tanh,
+                            scope='attention_0')
+                    logits_att = tf.contrib.layers.fully_connected(inputs=logits_att, 
+                            num_outputs=1, 
+                            activation_fn=None,
+                            biases_initializer=None,
+                            scope='attention_1')
+                    logits_att = tf.exp(logits_att - tf.reduce_max(logits_att, axis=1)[:,None,:]) * msk[:, :, None]
+                    weights = logits_att / tf.reduce_sum(logits_att, axis=1)[:, None, :]
+                    return weights
+        
+                cell = tf.contrib.rnn.GRUCell(args.num_units)
+                if args.num_layers > 1:
+                    cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
+                states, _ = tf.nn.dynamic_rnn(cell=cell,
+                        inputs=tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)),
+                        dtype=tf.float32,
+                        sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
+                weights = cal_attention(states, msk)
+                enc_state = tf.reduce_sum(states * weights, axis=1)
+                self.gate_weights = weights
             else:
                 raise 'Encoder type {} not supported'.format(args.encoder_type)
 
