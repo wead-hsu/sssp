@@ -26,6 +26,11 @@ class RnnClassifier(ModelBase):
                 shape=[None, None if args.fix_sent_len <=0 else args.fix_sent_len],
                 name='input_plh')
 
+        self.tag_plh = tf.placeholder(
+                dtype=tf.int64,
+                shape=[None, None if args.fix_sent_len <=0 else args.fix_sent_len],
+                name='tag_plh')
+
         self.mask_plh = tf.placeholder(
                 dtype=tf.float32,
                 shape=[None, None],
@@ -57,9 +62,11 @@ class RnnClassifier(ModelBase):
                     [args.vocab_size, args.embd_dim],
                     initializer=tf.constant_initializer(embd_init))
 
-    def _create_encoder(self, inp, msk, keep_rate, scope_name, args):
+    def _create_encoder(self, inp, tag, msk, keep_rate, scope_name, args):
         with tf.variable_scope(scope_name):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+            tag_inp = tf.nn.embedding_lookup(self.tag_matrix, tag)
+            emb_inp = tf.concat([emb_inp, tag_inp], axis=2)
             
             if args.encoder_type == 'LSTM':
                 cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
@@ -354,6 +361,7 @@ class RnnClassifier(ModelBase):
                 self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
+
             elif args.encoder_type == 'GRU+selfatt':
                 def cal_attention(states, msk):
                     # context is in the layers
@@ -366,7 +374,6 @@ class RnnClassifier(ModelBase):
                             activation_fn=None,
                             biases_initializer=None,
                             scope='attention_1')
-
 
                     max_logit_att = tf.reduce_max(logits_att-1e20*(1-msk[:,:,None]), axis=1)[:,None,:]
                     logits_att = tf.exp(logits_att - max_logit_att) * msk[:, :, None]
@@ -409,11 +416,13 @@ class RnnClassifier(ModelBase):
             self.init_global_step()
             self._create_placeholders(args)
             self._create_embedding_matrix(args)
+            self.tag_matrix = tf.get_variable('tag_matrix', [args.num_tags, 100],)
 
             batch_size = tf.shape(self.input_plh)[0]
             seqlen = tf.to_int64(tf.reduce_sum(self.mask_plh, axis=1))
             enc_state, gate_weights = self._create_encoder(
                     inp=self.input_plh,
+                    tag=self.tag_plh,
                     msk=self.mask_plh,
                     keep_rate=args.keep_rate,
                     scope_name='enc_rnn',
@@ -474,6 +483,7 @@ class RnnClassifier(ModelBase):
 
     def run_batch(self, sess, inps, istrn=True):
         plhs = [self.input_plh,
+                self.tag_plh,
                 self.mask_plh,
                 self.label_plh]
 
@@ -527,14 +537,17 @@ class RnnClassifier(ModelBase):
         return self.saver
 
     def get_prepare_func(self, args):
-        def prepare_data(inp):
-            inp = [[s.split(' ') for s in l.strip().split('\t')] for l in inp[0]]
-            inp = list(zip(*inp))
-            label, inp = inp
-             
+        def prepare_data(raw_inp):
+            raw_inp = [[s.split(' ') for s in l.strip().split('\t')] for l in raw_inp[0]]
+            raw_inp = list(zip(*raw_inp))
+            labels = raw_inp[:-2]
+            inp = raw_inp[-2]
+            tag = raw_inp[-1]
+            
             def proc(sents):
                 sent_lens = [len(s) for s in sents]
                 max_sent_len = min(args.max_sent_len, max(sent_lens))
+                if args.fix_sent_len > 0: max_sent_len = args.fix_sent_len - 1
                 batch_size = len(sents)
                 inp_np = np.zeros([batch_size, max_sent_len+1], dtype='int64')
                 tgt_np = np.zeros([batch_size, max_sent_len+1], dtype='int64')
@@ -547,8 +560,11 @@ class RnnClassifier(ModelBase):
                 return inp_np, tgt_np, msk_np
             
             inp = proc(inp)
-            inp = (inp[1], inp[2])
-            label = np.asarray(label).flatten().astype('int64')
-
-            return inp + (label,)
+            tag = proc(tag)
+            inp = [inp[1], tag[1], inp[2]]
+            labels = [np.asarray(label).flatten().astype('int64') for label in labels]
+            #print(inp + labels)
+            #print([type(w) for w in inp+labels])
+            exit()
+            return inp + labels
         return prepare_data
