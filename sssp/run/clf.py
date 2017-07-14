@@ -31,8 +31,8 @@ def validate(valid_dset, model, sess, args, vocab, class_map):
         res_list.append(res_dict)
         
         batch_size = batch[0].shape[0]
-        wf.write(str(gate_weights))
-        wf.write(str(gate_weights.shape))
+        #wf.write(str(gate_weights))
+        #wf.write(str(gate_weights.shape))
         for sidx in range(batch_size):
             for idx, w in enumerate(batch[0][sidx]):
                 wf.write(vocab[w] + '\t')
