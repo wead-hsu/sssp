@@ -387,6 +387,7 @@ class RnnClassifier(ModelBase):
                 raise 'Encoder type {} not supported'.format(args.encoder_type)
 
             self._logger.info("Encoder done")
+            weights = weights * msk[:, :, None]
             return enc_state, weights
 
     def _create_fclayers(self, enc_state, num_classes, scope, args):
@@ -424,6 +425,7 @@ class RnnClassifier(ModelBase):
             self.loss_reg_diff = tf.reduce_mean(self.loss_reg_diff)
             self.loss_reg_sharp = tf.reduce_sum(gate_weights * (1-gate_weights), axis=1)
             self.loss_reg_sharp = tf.reduce_mean(self.loss_reg_sharp)
+            self.loss_reg_frobenius =  - tf.reduce_mean(tf.reduce_sum(gate_weights*gate_weights, axis=1))
 
             print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!', type(args.fixirrelevant))
 
@@ -446,7 +448,8 @@ class RnnClassifier(ModelBase):
             
             self.loss_total = self.loss + args.w_regl1 * self.loss_reg_l1 + \
                     args.w_regdiff * self.loss_reg_diff + \
-                    args.w_regsharp * self.loss_reg_sharp 
+                    args.w_regsharp * self.loss_reg_sharp  + \
+                    args.w_regfrobenius * self.loss_reg_frobenius 
             learning_rate = tf.train.exponential_decay(args.learning_rate, self.global_step, 
                     args.decay_steps,
                     args.decay_rate,
@@ -462,9 +465,10 @@ class RnnClassifier(ModelBase):
             self._logger.info('Created Saver')
 
             tf.summary.scalar('loss', self.loss)
-            tf.summary.scalar('loss_reg_l1', self.loss_reg_l1)
-            tf.summary.scalar('loss_reg_diff', self.loss_reg_diff)
-            tf.summary.scalar('loss_reg_sharp', self.loss_reg_sharp)
+            tf.summary.scalar('reg_l1', self.loss_reg_l1)
+            tf.summary.scalar('reg_diff', self.loss_reg_diff)
+            tf.summary.scalar('reg_sharp', self.loss_reg_sharp)
+            tf.summary.scalar('reg_frobenius', self.loss_reg_sharp)
             tf.summary.scalar('loss_total', self.loss_total)
             self.merged = tf.summary.merge_all()
 
@@ -481,9 +485,10 @@ class RnnClassifier(ModelBase):
             fetch_dict = [
                     ['loss_total', self.loss_total],
                     ['loss', self.loss],
-                    ['loss_reg_l1', self.loss_reg_l1],
-                    ['loss_reg_diff', self.loss_reg_diff],
-                    ['loss_reg_sharp', self.loss_reg_sharp],
+                    ['reg_l1', self.loss_reg_l1],
+                    ['reg_diff', self.loss_reg_diff],
+                    ['reg_sharp', self.loss_reg_sharp],
+                    ['reg_frobenius', self.loss_reg_frobenius],
                     ['acc', self.accuracy],
                     ]
 

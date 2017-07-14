@@ -12,6 +12,7 @@ def init_arguments(parser):
     parser.add_argument('--w_regl1', type=float, default=0.0, help='coefficient for l1 regulariztion')
     parser.add_argument('--w_regdiff', type=float, default=0.0, help='coefficient for l1 diff regulariztion')
     parser.add_argument('--w_regsharp', type=float, default=0.0, help='coefficient for l1 diff regulariztion')
+    parser.add_argument('--w_regfrobenius', type=float, default=0.0, help='coefficient for l1 diff regulariztion')
     parser.add_argument('--fix_sent_len', type=int, default=-1, help='if use cnn, sent length should be fixed')
     parser.add_argument('--filter_size', type=int, default=3, help='filter size for cnn')
     parser.add_argument('--num_filters', type=int, default=30, help='number of filters for cnn')
