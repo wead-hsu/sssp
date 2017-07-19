@@ -65,8 +65,9 @@ class RnnClassifier(ModelBase):
     def _create_encoder(self, inp, tag, msk, keep_rate, scope_name, args):
         with tf.variable_scope(scope_name):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            tag_inp = tf.nn.embedding_lookup(self.tag_matrix, tag)
-            emb_inp = tf.concat([emb_inp, tag_inp], axis=2)
+            if args.use_tag:
+                tag_inp = tf.nn.embedding_lookup(self.tag_matrix, tag)
+                emb_inp = tf.concat([emb_inp, tag_inp], axis=2)
             
             if args.encoder_type == 'LSTM':
                 cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
@@ -253,11 +254,11 @@ class RnnClassifier(ModelBase):
                 weights = output[1][0]
                 self.gate_weights = weights
             elif args.encoder_type == 'CNN':
-                filter_shape_1 = [args.filter_size, args.embd_dim, 1, args.num_filters]
+                filter_shape_1 = [args.filter_size, int(emb_inp.shape[2]), 1, args.num_filters]
                 filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
 
                 #initialize word embedding, task embedding parameters, sentence embedding matrix
-                emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                #emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
                 emb_inp = tf.expand_dims(emb_inp, -1)
                 #emb_inp = tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)) # dropout is bad
 
@@ -283,12 +284,12 @@ class RnnClassifier(ModelBase):
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
             elif args.encoder_type == 'CNN3layer':
-                filter_shape_1 = [args.filter_size, args.embd_dim, 1, args.num_filters]
+                filter_shape_1 = [args.filter_size, int(emb_inp.shape[2]), 1, args.num_filters]
                 filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
                 filter_shape_3 = [args.filter_size, 1, args.num_filters, args.num_filters]
 
                 #initialize word embedding, task embedding parameters, sentence embedding matrix
-                emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                #emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
                 emb_inp = tf.expand_dims(emb_inp, -1)
                 #emb_inp = tf.nn.dropout(emb_inp, tf.where(self.is_training, args.keep_rate, 1.0)) # dropout is bad
 
@@ -416,7 +417,8 @@ class RnnClassifier(ModelBase):
             self.init_global_step()
             self._create_placeholders(args)
             self._create_embedding_matrix(args)
-            self.tag_matrix = tf.get_variable('tag_matrix', [args.num_tags, 100],)
+            if args.use_tag:
+                self.tag_matrix = tf.get_variable('tag_matrix', [args.num_tags, 100],)
 
             batch_size = tf.shape(self.input_plh)[0]
             seqlen = tf.to_int64(tf.reduce_sum(self.mask_plh, axis=1))
@@ -563,8 +565,5 @@ class RnnClassifier(ModelBase):
             tag = proc(tag)
             inp = [inp[1], tag[1], inp[2]]
             labels = [np.asarray(label).flatten().astype('int64') for label in labels]
-            #print(inp + labels)
-            #print([type(w) for w in inp+labels])
-            exit()
             return inp + labels
         return prepare_data

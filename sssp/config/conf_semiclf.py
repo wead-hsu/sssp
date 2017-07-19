@@ -4,6 +4,7 @@ def init_arguments(parser):
     # MODEL
     parser.add_argument('--model_path', type=str, default='sssp.models.semiclf.semiclf_sample_aaai17', help='model_path')
     parser.add_argument('--model_name', type=str, default='SemiClassifier', help='model_name')
+    parser.add_argument('--classifier_type', type=str, default='LSTM', help='Type of RNN')
     parser.add_argument('--rnn_type', type=str, default='LSTM', help='Type of RNN')
     parser.add_argument('--num_units', type=int, default=512, help='Dimension of hidden state of RNN')
     parser.add_argument('--batch_size_label', type=int, default=20, help='batch_size')
@@ -14,7 +15,7 @@ def init_arguments(parser):
     parser.add_argument('--dim_z', type=int, default=100, help='Dimension of latent code')
     parser.add_argument('--alpha', type=float, default=1.0, help='rescale for unlabeled clf')
     parser.add_argument('--num_pretrain_steps', type=int, default=8000, help='Number of step for pretraining')
-    parser.add_argument('--use_weights', type=bool, default=True, help='if use, multiply weights in decoder')
+    parser.add_argument('--use_weights', action='store_true', default=False, help='if use, multiply weights in decoder')
     parser.add_argument('--keep_rate', type=float, default=0.5, help='keep rate')
 
     # TRAINING

@@ -13,6 +13,7 @@ import logging
 import numpy as np
 import pickle as pkl
 from sssp.models.model_base import ModelBase
+from sssp.models.layers.classifier import *
 from sssp.utils.utils import res_to_string
 
 logging.basicConfig(level=logging.INFO)
@@ -151,25 +152,21 @@ class SemiClassifier(ModelBase):
 
         return dec_outs, out_proj, dec_step_func, cell
 
-    def _create_rnn_classifier(self, inp, seqlen, scope_name, args):
-        with tf.variable_scope(scope_name):
-            enc_state = self._create_encoder(inp, seqlen, 'rnn', args)
-            enc_state = tf.nn.dropout(enc_state, self.keep_prob_plh)
-            logits = tf.contrib.layers.fully_connected(enc_state, 
-                    num_outputs=args.num_units, 
-                    activation_fn=tf.tanh, 
-                    scope='fc0')
-            logits = tf.contrib.layers.batch_norm(logits, 
-                    center=True,
-                    scale=True, 
-                    is_training = self.is_training_plh,
-                    scope='bn')
-            logits = tf.nn.dropout(logits, self.keep_prob_plh)
-            logits = tf.contrib.layers.fully_connected(logits, 
-                    num_outputs=args.num_classes, 
-                    activation_fn=None, 
-                    scope='fc1')
-        return logits
+    def _create_rnn_classifier(self, inp, msk, keep_rate, scope_name, args):
+        enc_state, weights = create_encoder(self,
+                inp=inp,
+                msk=msk,
+                keep_rate=args.keep_rate,
+                scope_name=scope_name,
+                args=args)
+
+        logits = create_fclayers(self,
+                enc_state=enc_state,
+                num_classes=args.num_classes,
+                args=args,
+                scope='fc')
+
+        return logits, weights
 
     def _create_softmax_layer(self, proj, dec_outs, targets, weights, scope_name, args):
         with tf.variable_scope(scope_name):
@@ -185,7 +182,7 @@ class SemiClassifier(ModelBase):
                         logits=logits,
                         targets=targets,
                         weights=weights,
-                        average_across_timesteps=True,
+                        average_across_timesteps=False,
                         average_across_batch=False,
                         softmax_loss_function=None)
                 return llh_precise
@@ -215,7 +212,7 @@ class SemiClassifier(ModelBase):
                             logits=dec_outs,
                             targets=targets,
                             weights=weights,
-                            average_across_timesteps=True,
+                            average_across_timesteps=False,
                             average_across_batch=False,
                             softmax_loss_function=sampled_loss)
                     self._logger.info('Use sampled softmax during training')
@@ -307,14 +304,17 @@ class SemiClassifier(ModelBase):
                     self.msk_l_plh,
                     self.label_plh,
                     args)
+            self.recons_loss_l = tf.reduce_sum(self.recons_loss_l * self.msk_l_plh, axis=1)
+            self.recons_loss_l = self.recons_loss_l / tf.reduce_sum(self.msk_l_plh, axis=1)[:,None]
             self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
             self.ppl_l = tf.exp(self.recons_loss_l)
             self.kl_loss_l = tf.reduce_mean(self.kl_loss_l)
             self.elbo_loss_l = self.recons_loss_l + self.kl_loss_l * self.kl_w
             
             """ label CLASSIFICATION """
-            self.logits_l = self._create_rnn_classifier(self.tgt_l_plh,
-                    tf.to_int32(tf.reduce_sum(self.msk_l_plh, axis=1)),
+            self.logits_l, weights_l = self._create_rnn_classifier(self.tgt_l_plh,
+                    self.msk_l_plh,
+                    keep_rate=args.keep_rate,
                     scope_name='clf',
                     args=args)
             self.predict_loss_l = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -336,8 +336,9 @@ class SemiClassifier(ModelBase):
     def get_loss_u(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
             """ unlabel CLASSIFICATION """
-            self.logits_u = self._create_rnn_classifier(self.tgt_u_plh,
-                    tf.to_int32(tf.reduce_sum(self.msk_u_plh, axis=1)),
+            self.logits_u, weights_u = self._create_rnn_classifier(self.tgt_u_plh,
+                    self.msk_u_plh,
+                    keep_rate=args.keep_rate,
                     scope_name='clf',
                     args=args)
             self.predict_u = tf.nn.softmax(self.logits_u)
@@ -352,13 +353,26 @@ class SemiClassifier(ModelBase):
                         self.msk_u_plh,
                         y_st,
                         args)
-                routing_loss = recons_loss_u_s + kl_loss_u_s * self.kl_w
+
+                # routing_loss for sampling-based classifier
+                if args.use_weights:
+                    routing_loss = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh*weights_u[:,:,0], axis=1)
+                    routing_loss = routing_loss / tf.reduce_sum(weights_u[:,:,0], axis=1)[:,None]
+                else:
+                    routing_loss = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh, axis=1)
+                    routing_loss = routing_loss / tf.reduce_sum(self.msk_u_plh, axis=1)[:,None]
+                routing_loss += kl_loss_u_s * self.kl_w
+                
+                # loss for the generator/decoder
+                loss_u_of_gen = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh, axis=1) 
+                loss_u_of_gen = loss_u_of_gen / tf.reduce_sum(self.msk_u_plh, axis=1)[:, None]
+                loss_u_of_gen += kl_loss_u_s * self.kl_w
 
         with tf.variable_scope(args.log_prefix, reuse=False):
             surrogate_loss = y_st.loss(routing_loss)
             self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
 
-        return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(routing_loss) + self.entropy_u
+        return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(loss_u_of_gen) + self.entropy_u
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
