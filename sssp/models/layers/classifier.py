@@ -326,6 +326,26 @@ def create_encoder(self, inp, msk, keep_rate, scope_name, args):
             weights = cal_attention(states, msk)
             enc_state = tf.reduce_sum(states * weights, axis=1)
             self.gate_weights = weights
+        elif args.classifier_type == 'CNN+multiscale':
+            emb_inp = tf.expand_dims(emb_inp, -1)
+            list_filter_size = [1,2,3,4,5]
+            list_pool_output = []
+            for fs in list_filter_size:
+                with tf.name_scope('conv_maxpool_{}'.format(fs)):
+                    filter_shape = [fs, int(emb_inp.shape[2]), 1, args.num_filters]
+                    conv_W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+                    conv_b = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b")
+                    conv = tf.nn.conv2d(emb_inp, conv_W, strides=[1, 1, 1, 1], padding="VALID", name="conv")
+                    conv = tf.nn.relu(tf.nn.bias_add(conv, conv_b), name="relu")
+                    conv = tf.squeeze(conv, 2)
+                    print(conv.shape)
+                    #pooled = tf.nn.max_pool(conv, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='VALID', name="pool1")
+                    pooled = tf.reduce_max(tf.transpose(conv, [0, 2, 1]), [2])
+                    print(pooled.shape)
+                    list_pool_output.append(pooled)
+            enc_state = tf.concat(list_pool_output, 1)
+            weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
+            self.gate_weights = weights
         else:
             raise 'Encoder type {} not supported'.format(args.classifier_type)
 

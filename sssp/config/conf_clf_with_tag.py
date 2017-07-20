@@ -4,7 +4,7 @@ def init_arguments(parser):
     # MODEL
     parser.add_argument('--model_path', type=str, default='sssp.models.clf.basic_clf_with_tag', help='model_path')
     parser.add_argument('--model_name', type=str, default='RnnClassifier', help='model_name')
-    parser.add_argument('--encoder_type', type=str, default='GatedGRU', help='Type of encoder')
+    parser.add_argument('--classifier_type', type=str, default='GatedGRU', help='Type of encoder')
     parser.add_argument('--num_units', type=int, default=512, help='Dimension of hidden state of RNN')
     parser.add_argument('--batch_size', type=int, default=25, help='batch_size')
     parser.add_argument('--num_layers', type=int, default=1, help='num_layers')

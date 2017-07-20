@@ -69,7 +69,7 @@ class RnnClassifier(ModelBase):
                 tag_inp = tf.nn.embedding_lookup(self.tag_matrix, tag)
                 emb_inp = tf.concat([emb_inp, tag_inp], axis=2)
             
-            if args.encoder_type == 'LSTM':
+            if args.classifier_type == 'LSTM':
                 cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
@@ -82,7 +82,7 @@ class RnnClassifier(ModelBase):
                 else:
                     enc_state = enc_state[-1][-1]
                 weights = tf.zeros(tf.shape(emb_inp)[:2])
-            elif args.encoder_type == 'GRU':
+            elif args.classifier_type == 'GRU':
                 cell = tf.contrib.rnn.GRUCell(args.num_units)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
@@ -92,7 +92,7 @@ class RnnClassifier(ModelBase):
                         sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.encoder_type == 'BiGRU':
+            elif args.classifier_type == 'BiGRU':
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 _, enc_state = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
@@ -102,7 +102,7 @@ class RnnClassifier(ModelBase):
                 enc_state = tf.concat(enc_state, axis=1)
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.encoder_type == 'BiGRU+maxpooling':
+            elif args.classifier_type == 'BiGRU+maxpooling':
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 enc_states, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
@@ -113,7 +113,7 @@ class RnnClassifier(ModelBase):
                 enc_state = tf.reduce_max(enc_state, axis=1)
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.encoder_type == 'GatedGRU':
+            elif args.classifier_type == 'GatedGRU':
                 from sssp.models.layers.gated_gru import GatedGRU
                 """
                 enc_layer = GatedGRU(emb_inp.shape[2], args.num_units)
@@ -130,7 +130,7 @@ class RnnClassifier(ModelBase):
                 self.gate_weights = weights
                 self._logger.debug(enc_state.shape)
                 self._logger.debug(weights.shape)
-            elif args.encoder_type == 'GatedCtxGRU':
+            elif args.classifier_type == 'GatedCtxGRU':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
 
                 def _reverse(input_, seq_lengths, seq_dim, batch_dim):
@@ -165,7 +165,7 @@ class RnnClassifier(ModelBase):
                 self.gate_weights = weights
                 weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
                 #weights = msk / tf.reduce_sum(msk, axis=1, keep_dims=True)
-            elif args.encoder_type == 'tagGatedGRU':
+            elif args.classifier_type == 'tagGatedGRU':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
                 sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
                 cell_tag = tf.contrib.rnn.GRUCell(args.num_units)
@@ -182,7 +182,7 @@ class RnnClassifier(ModelBase):
                 enc_state, weights = gatedctxgru_layer.forward(emb_inp, outputs, msk, return_final=True)
                 self.gate_weights = weights
                 weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            elif args.encoder_type == 'Tag=bigru;Gatedgru=bwctx+tag':
+            elif args.classifier_type == 'Tag=bigru;Gatedgru=bwctx+tag':
                 from sssp.models.layers.gated_gru_with_context import GatedGRU
                 sequence_length = tf.to_int64(tf.reduce_sum(msk, axis=1))
                 
@@ -231,7 +231,7 @@ class RnnClassifier(ModelBase):
                         return_final=True)
                 self.gate_weights = weights
                 #weights = weights / tf.reduce_sum(weights, axis=1, keep_dims=True)
-            elif args.encoder_type == 'EntityNetwork':
+            elif args.classifier_type == 'EntityNetwork':
                 from sssp.models.layers.entity_network import EntityNetwork
                 cell = tf.contrib.rnn.GRUCell(args.num_units)
                 if args.num_layers > 1:
@@ -253,7 +253,7 @@ class RnnClassifier(ModelBase):
                 enc_state = final_state[0][0]
                 weights = output[1][0]
                 self.gate_weights = weights
-            elif args.encoder_type == 'CNN':
+            elif args.classifier_type == 'CNN':
                 filter_shape_1 = [args.filter_size, int(emb_inp.shape[2]), 1, args.num_filters]
                 filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
 
@@ -283,7 +283,7 @@ class RnnClassifier(ModelBase):
                 self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.encoder_type == 'CNN3layer':
+            elif args.classifier_type == 'CNN3layer':
                 filter_shape_1 = [args.filter_size, int(emb_inp.shape[2]), 1, args.num_filters]
                 filter_shape_2 = [args.filter_size, 1, args.num_filters, args.num_filters]
                 filter_shape_3 = [args.filter_size, 1, args.num_filters, args.num_filters]
@@ -325,7 +325,7 @@ class RnnClassifier(ModelBase):
                 self._logger.info('enc_state.shape: {}'.format(enc_state.shape))
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
-            elif args.encoder_type == 'BiGRU+CNN':
+            elif args.classifier_type == 'BiGRU+CNN':
                 cell = tf.contrib.rnn.GRUCell(args.num_units/ 2)
                 enc_states, enc_state = tf.nn.bidirectional_dynamic_rnn(cell_fw=cell, 
                         cell_bw=cell, 
@@ -363,7 +363,7 @@ class RnnClassifier(ModelBase):
                 weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
                 self.gate_weights = weights
 
-            elif args.encoder_type == 'GRU+selfatt':
+            elif args.classifier_type == 'GRU+selfatt':
                 def cal_attention(states, msk):
                     # context is in the layers
                     logits_att = tf.contrib.layers.fully_connected(inputs=states,
@@ -391,8 +391,28 @@ class RnnClassifier(ModelBase):
                 weights = cal_attention(states, msk)
                 enc_state = tf.reduce_sum(states * weights, axis=1)
                 self.gate_weights = weights
+            elif args.classifier_type == 'CNN+multiscale':
+                emb_inp = tf.expand_dims(emb_inp, -1)
+                list_filter_size = [1,2,3,4,5]
+                list_pool_output = []
+                for fs in list_filter_size:
+                    with tf.name_scope('conv_maxpool_{}'.format(fs)):
+                        filter_shape = [fs, int(emb_inp.shape[2]), 1, args.num_filters]
+                        conv_W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+                        conv_b = tf.Variable(tf.constant(0.1, shape=[args.num_filters]), name="b")
+                        conv = tf.nn.conv2d(emb_inp, conv_W, strides=[1, 1, 1, 1], padding="VALID", name="conv")
+                        conv = tf.nn.relu(tf.nn.bias_add(conv, conv_b), name="relu")
+                        conv = tf.squeeze(conv, 2)
+                        print(conv.shape)
+                        #pooled = tf.nn.max_pool(conv, ksize=[1, 2, 1, 1], strides=[1, 2, 1, 1], padding='VALID', name="pool1")
+                        pooled = tf.reduce_max(tf.transpose(conv, [0, 2, 1]), [2])
+                        print(pooled.shape)
+                        list_pool_output.append(pooled)
+                enc_state = tf.concat(list_pool_output, 1)
+                weights = tf.zeros([tf.shape(inp)[0], tf.shape(inp)[1], 1])
+                self.gate_weights = weights
             else:
-                raise 'Encoder type {} not supported'.format(args.encoder_type)
+                raise 'Encoder type {} not supported'.format(args.classifier_type)
 
             self._logger.info("Encoder done")
             return enc_state, weights

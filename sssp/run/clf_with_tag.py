@@ -9,6 +9,7 @@ from sssp.io.batch_iterator import threaded_generator
 from sssp.utils.utils import average_res, res_to_string
 import tensorflow as tf
 import logging
+import numpy as np
 from sklearn.metrics import confusion_matrix
 
 logging.basicConfig(level=logging.DEBUG)
