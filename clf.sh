@@ -8,7 +8,7 @@ CUDA_VISIBLE_DEVICES=1 python3 clf.py \
 	--vocab_path ${save_dir}/vocab.pkl \
 	--labels_path ${save_dir}/class_map.pkl \
 	--save_dir results/tmp/ \
-	--encoder_type "GRU" \
+	--classifier_type "GRU" \
 	--num_classes 8 \
 	--w_regfrobenius 0.001 \
 	#--fix_sent_len 300 \
