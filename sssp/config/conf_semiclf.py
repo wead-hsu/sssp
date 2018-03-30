@@ -84,5 +84,6 @@ def init_arguments(parser):
         parser.add_argument('--num_classes', type=int, default=4, help='Number of classes')
         parser.add_argument('--vocab_size', type=int, default=23829, help='Size of vocabulary')
         parser.add_argument('--max_sent_len', type=int, default=100, help='maximum sentence length')
-        parser.add_argument('--embd_path', type=str, default='data/ag_news/proc.old/webd.pkl', help='embd_path')
+        #parser.add_argument('--embd_path', type=str, default='data/ag_news/proc.old/webd.pkl', help='embd_path')
+        parser.add_argument('--embd_path', type=str, default=None, help='embd_path')
         parser.add_argument('--embd_dim', type=int, default=300, help='Dimension of embedding matrix')

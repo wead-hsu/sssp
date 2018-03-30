@@ -1,6 +1,6 @@
 # coding=utf-8
 
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, OrderedDict
 import numpy as np
 import logging
 import pickle as pkl
@@ -14,6 +14,7 @@ import pandas
 import re
 import sys
 import thulac
+import json
 
 thuseg = thulac.thulac(seg_only=True)
 
@@ -1689,7 +1690,7 @@ def proc_googleextration():
             pkl.dump(label_dict, f)
     
     # create dataset with different number of labeled samples {{{
-    for label_portion in [0.05, 0.1, 0.2, 0.4]:
+    for label_portion in [0.05, 0.1, 0.125, 0.15, 0.2, 0.4]:
         labeled, unlabeled = split_dict_samples(train, list_split_portion=[label_portion, 1-label_portion])
         labeled_flt = [(x, y) for y in labeled for x in labeled[y]]
         unlabeled_flt = [(x, y) for y in labeled for x in unlabeled[y]]
@@ -1723,6 +1724,6 @@ if __name__ == '__main__':
     #proc_zhongaonan_inchar_by_criteria()
     #proc_zhongaonan_inchar_by_criteria_for_hierachy()
     #proc_semeval2010task8()
-    for i in range(10): proc_zhongao_zzxs(inchar=True, cv_idx=i)
-    for i in range(10): proc_zhongao_zzxs(inchar=False, cv_idx=i)
-    #proc_googleextration()
+    #for i in range(10): proc_zhongao_zzxs(inchar=True, cv_idx=i)
+    #for i in range(10): proc_zhongao_zzxs(inchar=False, cv_idx=i)
+    proc_googleextration()
