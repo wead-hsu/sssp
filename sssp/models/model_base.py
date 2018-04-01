@@ -98,8 +98,8 @@ class ModelBase(object):
             if g is None:
                 print('WARNING: {} is not in the graph'.format(var_list[i].name))
 
-        grads = [tf.clip_by_value(g, -grad_clip, grad_clip) for g in grads]
-        grads, _ = tf.clip_by_global_norm(grads, max_norm)
+        if grad_clip: grads = [tf.clip_by_value(g, -grad_clip, grad_clip) for g in grads]
+        if max_norm: grads, _ = tf.clip_by_global_norm(grads, max_norm)
         optimizer = tf.train.AdamOptimizer(learning_rate)
 
         if not hasattr(self, 'global_step'):

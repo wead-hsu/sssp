@@ -3,6 +3,7 @@ import tensorflow as tf
 def create_encoder(self, inp, msk, keep_rate, scope_name, args):
     with tf.variable_scope(scope_name):
         emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+        emb_inp = tf.nn.dropout(emb_inp, keep_rate)
         
         if args.classifier_type == 'LSTM':
             cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)

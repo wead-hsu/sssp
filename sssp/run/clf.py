@@ -122,10 +122,13 @@ def main():
     train_dset = initDataset(args.train_path, get_prepare_func(args), args.batch_size)
     valid_dset = initDataset(args.valid_path, get_prepare_func(args), args.batch_size)
     test_dset = initDataset(args.test_path, get_prepare_func(args), args.batch_size)
-
-    vocab = pkl.load(open(args.vocab_path, 'rb'))
-    args.vocab_size = max(vocab.values())+1
-    vocab = {int(vocab[k]): k for k in vocab}
+        
+    if args.vocab_path:
+        vocab = pkl.load(open(args.vocab_path, 'rb'))
+        args.vocab_size = max(vocab.values())+1
+        vocab = {int(vocab[k]): k for k in vocab}
+    else:
+        vocab = {i: 'NONE' for i in range(args.vocab_size)}
     if args.labels_path:
         class_map = pkl.load(open(args.labels_path, 'rb'))
         class_map = dict([[class_map[k], k.strip()] for k in class_map])

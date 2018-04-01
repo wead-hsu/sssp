@@ -37,17 +37,17 @@ def init_arguments(parser):
     parser.add_argument('--task_id', type=int, default=None, help='id of the task')
 
     parser.add_argument('--train_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')
-    parser.add_argument('--train_label_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')
-    parser.add_argument('--train_unlabel_path', type=str, default='data/case_type_clf/proc/unlabeled.data.idx', help='Directory of datasets')
+    #parser.add_argument('--train_label_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')
+    #parser.add_argument('--train_unlabel_path', type=str, default='data/case_type_clf/proc/unlabeled.data.idx', help='Directory of datasets')
     parser.add_argument('--valid_path', type=str, default='data/case_type_clf/proc/dev.data.idx', help='Directory of datasets')
     parser.add_argument('--test_path', type=str, default='data/case_type_clf/proc/test.data.idx', help='Directory of datasets')
-    parser.add_argument('--vocab_path', type=str, default='data/case_type_clf/proc/vocab.pkl', help='vocab_path')
+    parser.add_argument('--vocab_path', type=str, default=None, help='vocab_path')
     parser.add_argument('--save_dir', type=str, default='results/case/clf_gatedgru-noforget', help='Directory for saving')
     parser.add_argument('--init_from', type=str, default=None, help='Restore from the trained model path')
     parser.add_argument('--num_classes', type=int, default=12, help='Number of classes')
     parser.add_argument('--vocab_size', type=int, default=20000, help='Size of vocabulary')
     parser.add_argument('--embd_path', type=str, default=None, help='')
-    parser.add_argument('--max_sent_len', type=int, default=600, help='maximum sentence length')
+    parser.add_argument('--max_sent_len', type=int, default=400, help='maximum sentence length')
    
     # ENVORIMENTS
     parser.add_argument('--embd_dim', type=int, default=300, help='Dimension of embedding matrix')
