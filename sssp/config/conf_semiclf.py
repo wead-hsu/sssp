@@ -17,6 +17,7 @@ def init_arguments(parser):
     parser.add_argument('--num_pretrain_steps', type=int, default=8000, help='Number of step for pretraining')
     parser.add_argument('--use_weights', action='store_true', default=False, help='if use, multiply weights in decoder')
     parser.add_argument('--keep_rate', type=float, default=0.5, help='keep rate')
+    #parser.add_argument('--sample_unlabel', type=str, default='False', help='[S1, S2, False]')
 
     # TRAINING
     parser.add_argument('--max_epoch', type=int, default=400, help='Maximum number of epochs')
@@ -87,3 +88,14 @@ def init_arguments(parser):
         #parser.add_argument('--embd_path', type=str, default='data/ag_news/proc.old/webd.pkl', help='embd_path')
         parser.add_argument('--embd_path', type=str, default=None, help='embd_path')
         parser.add_argument('--embd_dim', type=int, default=300, help='Dimension of embedding matrix')
+
+    #for debug
+    parser.add_argument('--fixirrelevant', action='store_true', default=False, help='If fix the NAN logit')
+    parser.add_argument('--w_regl1', type=float, default=0.0, help='coefficient for l1 regulariztion')
+    parser.add_argument('--w_regdiff', type=float, default=0.0, help='coefficient for l1 diff regulariztion')
+    parser.add_argument('--w_regsharp', type=float, default=0.0, help='coefficient for l1 diff regulariztion')
+    parser.add_argument('--w_regfrobenius', type=float, default=0.0, help='coefficient for l1 diff regulariztion')
+    parser.add_argument('--fix_sent_len', type=int, default=-1, help='if use cnn, sent length should be fixed')
+    parser.add_argument('--filter_size', type=int, default=3, help='filter size for cnn')
+    parser.add_argument('--num_filters', type=int, default=30, help='number of filters for cnn')
+

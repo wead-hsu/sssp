@@ -235,13 +235,14 @@ class SemiClassifier(ModelBase):
         enc_state = tf.nn.dropout(enc_state, self.keep_prob_plh)
         enc_state = tf.contrib.layers.fully_connected(enc_state, 
                 num_outputs=args.num_units,
-                activation_fn=tf.tanh,
+                activation_fn=None,
                 scope='x_to_a')
         enc_state = tf.contrib.layers.batch_norm(enc_state,
                 center=True,
                 scale=True,
                 is_training=self.is_training_plh,
                 scope='bn_a')
+        enc_state = tf.tanh(enc_state)
         enc_state = tf.nn.dropout(enc_state, self.keep_prob_plh)
 
         label_oh = tf.gather(tf.eye(args.num_classes), label)
@@ -249,9 +250,10 @@ class SemiClassifier(ModelBase):
             y_enc_in = tf.contrib.layers.fully_connected(label_oh, args.dim_z, scope='y_enc_in')
             y_enc_in = tf.nn.dropout(y_enc_in, self.keep_prob_plh)
             pst_in = tf.concat([y_enc_in, enc_state], axis=1)
-            pst_in = tf.contrib.layers.fully_connected(pst_in, args.num_units, tf.tanh, scope='pst_in_dense')
+            pst_in = tf.contrib.layers.fully_connected(pst_in, args.num_units, None, scope='pst_in_dense')
             pst_in = tf.contrib.layers.batch_norm(pst_in, center=True, scale=True, 
                     is_training=self.is_training_plh, scope='pst_in_bn')
+            pst_in = tf.tanh(pst_in)
             pst_in = tf.nn.dropout(pst_in, self.keep_prob_plh)
             mu_pst = tf.contrib.layers.fully_connected(pst_in, args.dim_z, tf.nn.tanh,
                     scope='mu_posterior')
@@ -272,8 +274,9 @@ class SemiClassifier(ModelBase):
         z_ext = tf.contrib.layers.fully_connected(tf.reshape(z, [-1, args.dim_z]), args.num_units, scope='extend_z')
         z_ext = tf.nn.dropout(z_ext, self.keep_prob_plh)
         yz = tf.concat([z_ext, label_oh], axis=1)
-        yz = tf.contrib.layers.fully_connected(yz, args.num_units, tf.tanh, scope='yz_dense')
+        yz = tf.contrib.layers.fully_connected(yz, args.num_units, None, scope='yz_dense')
         yz = tf.contrib.layers.batch_norm(yz, center=True, scale=True, is_training=self.is_training_plh, scope='yz_bn')
+        yz = tf.tanh(yz)
         yz = tf.nn.dropout(yz, self.keep_prob_plh)
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         outs, proj, dec_func, cell  = self._create_decoder(
@@ -293,6 +296,7 @@ class SemiClassifier(ModelBase):
                 weights=msk,
                 scope_name='loss',
                 args=args)
+        recons_loss = recons_loss * msk
         
         return recons_loss, kl_loss
     
@@ -304,10 +308,10 @@ class SemiClassifier(ModelBase):
                     self.msk_l_plh,
                     self.label_plh,
                     args)
+            self.recons_loss_l = self.recons_loss_l * self.msk_l_plh
+            self.ppl_l = tf.exp(tf.reduce_sum(self.recons_loss_l) / tf.reduce_sum(self.msk_l_plh))
             self.recons_loss_l = tf.reduce_sum(self.recons_loss_l * self.msk_l_plh, axis=1)
-            self.recons_loss_l = self.recons_loss_l / tf.reduce_sum(self.msk_l_plh, axis=1)[:,None]
             self.recons_loss_l = tf.reduce_mean(self.recons_loss_l)
-            self.ppl_l = tf.exp(self.recons_loss_l)
             self.kl_loss_l = tf.reduce_mean(self.kl_loss_l)
             self.elbo_loss_l = self.recons_loss_l + self.kl_loss_l * self.kl_w
             
@@ -333,7 +337,7 @@ class SemiClassifier(ModelBase):
             tf.summary.scalar('accuracy_l', self.accuracy_l)
         return self.loss_l
     
-    def get_loss_u(self, args):
+    def get_loss_u_sample(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
             """ unlabel CLASSIFICATION """
             self.logits_u, weights_u = self._create_rnn_classifier(self.tgt_u_plh,
@@ -353,19 +357,19 @@ class SemiClassifier(ModelBase):
                         self.msk_u_plh,
                         y_st,
                         args)
+                recons_loss_u_s = recons_loss_u_s  * self.msk_u_plh
 
                 # routing_loss for sampling-based classifier
                 if args.use_weights:
                     routing_loss = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh*weights_u[:,:,0], axis=1)
-                    routing_loss = routing_loss / tf.reduce_sum(weights_u[:,:,0], axis=1)[:,None]
+                    routing_loss = routing_loss / tf.reduce_sum(weights_u[:,:,0], axis=1)
                 else:
                     routing_loss = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh, axis=1)
-                    routing_loss = routing_loss / tf.reduce_sum(self.msk_u_plh, axis=1)[:,None]
+                    routing_loss = routing_loss / tf.reduce_sum(self.msk_u_plh, axis=1)
                 routing_loss += kl_loss_u_s * self.kl_w
                 
                 # loss for the generator/decoder
-                loss_u_of_gen = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh, axis=1) 
-                loss_u_of_gen = loss_u_of_gen / tf.reduce_sum(self.msk_u_plh, axis=1)[:, None]
+                loss_u_of_gen = tf.reduce_sum(recons_loss_u_s, axis=1) 
                 loss_u_of_gen += kl_loss_u_s * self.kl_w
 
         with tf.variable_scope(args.log_prefix, reuse=False):
@@ -373,6 +377,37 @@ class SemiClassifier(ModelBase):
             self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
 
         return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(loss_u_of_gen) + self.entropy_u
+    
+    '''
+    def get_loss_u(self, args):
+        with tf.variable_scope(args.log_prefix, reuse=True):
+            """ unlabel CVAE """
+            self.recons_loss_u, self.kl_loss_u, self.loss_sum_u = [], [], []
+            for idx in range(args.num_classes):
+                label_i = tf.constant(idx)
+                label_i = tf.tile([idx], [tf.shape(self.tgt_u_plh)[0]])
+                recons_loss_ui, kl_loss_ui = self._get_elbo_label(self.inp_u_plh,
+                        self.tgt_u_plh,
+                        self.msk_u_plh,
+                        label_i, 
+                        args)
+                self.recons_loss_u.append(tf.reduce_sum(recons_loss_ui, axis=1))
+                self.kl_loss_u.append(kl_loss_ui)
+                self.loss_sum_u.append(tf.reduce_sum(recons_loss_ui, axis=1) + kl_loss_ui * self.kl_w)
+            
+            """ unlabel CLASSIFICATION """
+            self.logits_u, self.weights_u = self._create_rnn_classifier(self.tgt_u_plh,
+                    self.msk_u_plh,
+                    keep_rate=args.keep_rate,
+                    scope_name='clf',
+                    args=args)
+            self.predict_u = tf.nn.softmax(self.logits_u)
+            self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
+
+            self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
+            self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)
+        return self.loss_sum_u + self.entropy_u
+    '''
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
@@ -386,7 +421,7 @@ class SemiClassifier(ModelBase):
         
         self.loss_l = self.get_loss_l(args)
         self.train_unlabel = tf.greater(self.global_step, args.num_pretrain_steps)
-        self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u(args), lambda: tf.constant(0.))
+        self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u_sample(args), lambda: tf.constant(0.))
         tf.summary.scalar('train_unlabel', tf.to_int64(self.train_unlabel))
         tf.summary.scalar('loss_u', self.loss_u)
 
@@ -397,10 +432,10 @@ class SemiClassifier(ModelBase):
             # optimizer
             #embd_var = self.embedding_matrix
             #other_var_list = [v for v in tf.trainable_variables() if v.name != embd_var.name]
-            learning_rate = tf.train.exponential_decay(args.learning_rate, self.global_step, 
-                    args.decay_steps,
-                    args.decay_rate,
-                    staircase=True)
+            #learning_rate = tf.train.exponential_decay(args.learning_rate, self.global_step, 
+                    #args.decay_steps,
+                    #args.decay_rate,
+                    #staircase=True)
             self.train_op = self.training_op(self.loss, #tf.trainable_variables(),
                     tf.get_collection(key=tf.GraphKeys.TRAINABLE_VARIABLES, scope=args.log_prefix),
                     grad_clip=args.grad_clip,

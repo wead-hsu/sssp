@@ -20,11 +20,11 @@ def get_acc(filename, by_loss):
             if not test_line:
                 break
             line_cnt += 1
-            assert 'test' in test_line
+            assert 'TEST' in test_line
             #print(valid_line, test_line)
-            valid_loss = float(valid_line.split('loss: ')[1].split('\t')[0])
-            valid_acc = float(valid_line.split('acc: ')[1].split('\t')[0])
-            test_acc = float(test_line.split('acc: ')[1].split('\t')[0])
+            valid_loss = float(valid_line.split('pred_l: ')[1].split('\t')[0])
+            valid_acc = float(valid_line.split('acc_l: ')[1].split('\t')[0])
+            test_acc = float(test_line.split('acc_l: ')[1].split('\t')[0])
             if by_loss:
                 if valid_loss < res_valid_loss:
                     res_line_cnt = line_cnt

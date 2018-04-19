@@ -6,17 +6,17 @@ CUDA_VISIBLE_DEVICES=3 python3 clf.py \
 	--train_path ${save_dir}/labeled.data.idx \
 	--valid_path ${save_dir}/valid.data.idx \
 	--test_path ${save_dir}/test.data.idx \
-	--save_dir results/imdb/clf-imdb20000-cnnmultiscale \
-	--classifier_type "CNN+multiscale" \
-	--num_classes 2 \
+	--save_dir results/ag/clf-ag32k-lstm \
+	--classifier_type "LSTM" \
+	--num_classes 4 \
 	--vocab_size 20000\
 	--validate_every 1000 \
 	--max_sent_len 400 \
-	--fix_sent_len 400 \
-	--keep_rate 0.8 \
-	--num_filters 150 \
+	--keep_rate 0.5 \
 	--log_prefix 'clf' \
 	--embd_dim 300 \
+	#--num_filters 150 \
+	#--fix_sent_len 400 \
 	#--embd_path ${save_dir}/embd.pkl \
 	#--num_units 512 \
 	#--max_norm 0.0 \

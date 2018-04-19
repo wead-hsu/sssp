@@ -5,7 +5,7 @@ def init_arguments(parser):
     parser.add_argument('--model_path', type=str, default='sssp.models.clf.basic_clf', help='model_path')
     parser.add_argument('--model_name', type=str, default='RnnClassifier', help='model_name')
     parser.add_argument('--classifier_type', type=str, default='GatedGRU', help='Type of encoder')
-    parser.add_argument('--num_units', type=int, default=512, help='Dimension of hidden state of RNN')
+    parser.add_argument('--num_units', type=int, default=256, help='Dimension of hidden state of RNN')
     parser.add_argument('--batch_size', type=int, default=25, help='batch_size')
     parser.add_argument('--num_layers', type=int, default=1, help='num_layers')
     parser.add_argument('--fixirrelevant', action='store_true', default=False, help='If fix the NAN logit')
@@ -37,8 +37,6 @@ def init_arguments(parser):
     parser.add_argument('--task_id', type=int, default=None, help='id of the task')
 
     parser.add_argument('--train_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')
-    #parser.add_argument('--train_label_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')
-    #parser.add_argument('--train_unlabel_path', type=str, default='data/case_type_clf/proc/unlabeled.data.idx', help='Directory of datasets')
     parser.add_argument('--valid_path', type=str, default='data/case_type_clf/proc/dev.data.idx', help='Directory of datasets')
     parser.add_argument('--test_path', type=str, default='data/case_type_clf/proc/test.data.idx', help='Directory of datasets')
     parser.add_argument('--vocab_path', type=str, default=None, help='vocab_path')
@@ -53,3 +51,9 @@ def init_arguments(parser):
     parser.add_argument('--embd_dim', type=int, default=300, help='Dimension of embedding matrix')
     parser.add_argument('--max_to_keep', type=int, default=2, help='max_to_keep')
     parser.add_argument('--log_prefix', type=str, default='rnn_test', help='Log prefix')
+
+    #debug
+    parser.add_argument('--train_label_path', type=str, default='data/case_type_clf/proc/train_all.data.idx', help='Directory of datasets')
+    parser.add_argument('--train_unlabel_path', type=str, default='data/case_type_clf/proc/unlabeled.data.idx', help='Directory of datasets')
+    parser.add_argument('--batch_size_label', type=int, default=20, help='batch_size')
+    parser.add_argument('--batch_size_unlabel', type=int, default=25, help='batch_size')
