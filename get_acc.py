@@ -26,13 +26,13 @@ def get_acc(filename, by_loss):
             valid_acc = float(valid_line.split('acc_l: ')[1].split('\t')[0])
             test_acc = float(test_line.split('acc_l: ')[1].split('\t')[0])
             if by_loss:
-                if valid_loss < res_valid_loss:
+                if valid_loss <= res_valid_loss:
                     res_line_cnt = line_cnt
                     res_valid_loss = valid_loss
                     res_valid_acc = valid_acc
                     res_test_acc = test_acc
             else:
-                if valid_acc > res_valid_acc:
+                if valid_acc >= res_valid_acc:
                     res_line_cnt = line_cnt
                     res_valid_loss = valid_loss
                     res_valid_acc = valid_acc
@@ -45,6 +45,7 @@ def get_acc(filename, by_loss):
     return res_valid_loss, res_valid_acc, res_test_acc, line_cnt
 
 if __name__ == '__main__':
-    filename = sys.argv[1]
-    get_acc(filename, True)
-    get_acc(filename, False)
+    for filename in  sys.argv[1::]:
+        print(filename)
+        get_acc(filename, True)
+        get_acc(filename, False)

@@ -84,9 +84,9 @@ class ModelBase(object):
         return optimizer.apply_gradients(zip(grads, var_list), global_step=self.global_step)  # a tf.bool
 
     def training_op(self, cost, var_list,
-            grad_clip=5.0,
-            max_norm=200.0,
-            learning_rate=0.01,
+            grad_clip=-1,
+            max_norm=-1,
+            learning_rate=0.001,
             grads=None, 
             train_embd=True):
         
@@ -98,8 +98,8 @@ class ModelBase(object):
             if g is None:
                 print('WARNING: {} is not in the graph'.format(var_list[i].name))
 
-        if grad_clip: grads = [tf.clip_by_value(g, -grad_clip, grad_clip) for g in grads]
-        if max_norm: grads, _ = tf.clip_by_global_norm(grads, max_norm)
+        if grad_clip > 0: grads = [tf.clip_by_value(g, -grad_clip, grad_clip) for g in grads]
+        if max_norm > 0: grads, _ = tf.clip_by_global_norm(grads, max_norm)
         optimizer = tf.train.AdamOptimizer(learning_rate)
 
         if not hasattr(self, 'global_step'):

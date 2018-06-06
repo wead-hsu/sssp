@@ -120,19 +120,32 @@ class SemiClassifier(ModelBase):
 
             return enc_state
 
-    def _create_decoder(self, inp, seqlen, init_state, label_oh, scope_name, args):
+    def _create_decoder(self, inp, mask, init_state, label_oh, scope_name, args):
         with tf.variable_scope(scope_name):
-            emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
-            emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
 
-            cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+            if args.decoder_type == 'sclstm':
+                self._logger.info('Using ScLSTM as the decoder')
+                from sssp.models.layers.sclstm import ScLSTM
+                emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
+                y_inp = tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])
+                sclstm_layer = ScLSTM(args.embd_dim, args.num_units, args.num_classes)
+                _, dec_outs = sclstm_layer.forward(emb_inp, mask, y_inp, return_final=False, initial_state=(init_state, init_state))
+                cell = sclstm_layer._lstm_step
+            else:
+                self._logger.info('Using LSTM as the decoder')
+                emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
+                emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
+                emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
 
-            dec_outs, _ = tf.nn.dynamic_rnn(
-                    cell=cell,
-                    inputs=emb_inp,
-                    sequence_length=seqlen, 
-                    initial_state=init_state)
+                cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+
+                dec_outs, _ = tf.nn.dynamic_rnn(
+                        cell=cell,
+                        inputs=emb_inp,
+                        sequence_length=tf.to_int32(tf.reduce_sum(mask, axis=1)),
+                        initial_state=tf.contrib.rnn.LSTMStateTuple(init_state, init_state)
+                        )
 
             w_t = tf.get_variable(
                     'proj_w', 
@@ -281,9 +294,9 @@ class SemiClassifier(ModelBase):
         xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         outs, proj, dec_func, cell  = self._create_decoder(
                 inp,
-                seqlen=xlen,
+                mask=msk,
                 label_oh=label_oh,
-                init_state=tf.contrib.rnn.LSTMStateTuple(yz, yz),
+                init_state=yz, #tf.contrib.rnn.LSTMStateTuple(yz, yz),
                 scope_name='dec',
                 args=args)
         outs = tf.nn.dropout(outs, self.keep_prob_plh)
@@ -361,6 +374,10 @@ class SemiClassifier(ModelBase):
 
                 # routing_loss for sampling-based classifier
                 if args.use_weights:
+                    self._logger.info('Use Reweighting Approach')
+                    if args.use_binaryweights:
+                        self._logger.info('Use Binary Reweighting Approach')
+                        weights_u = tf.cast(tf.greater(weights_u, 1/tf.reduce_sum(self.msk_u_plh, axis=1)[:, None, None]), tf.float32)
                     routing_loss = tf.reduce_sum(recons_loss_u_s*self.msk_u_plh*weights_u[:,:,0], axis=1)
                     routing_loss = routing_loss / tf.reduce_sum(weights_u[:,:,0], axis=1)
                 else:
@@ -378,8 +395,8 @@ class SemiClassifier(ModelBase):
 
         return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(loss_u_of_gen) + self.entropy_u
     
-    '''
     def get_loss_u(self, args):
+        self._logger.info('Reweighting approach is not valid without sampling')
         with tf.variable_scope(args.log_prefix, reuse=True):
             """ unlabel CVAE """
             self.recons_loss_u, self.kl_loss_u, self.loss_sum_u = [], [], []
@@ -407,7 +424,6 @@ class SemiClassifier(ModelBase):
             self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
             self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)
         return self.loss_sum_u + self.entropy_u
-    '''
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
@@ -421,7 +437,12 @@ class SemiClassifier(ModelBase):
         
         self.loss_l = self.get_loss_l(args)
         self.train_unlabel = tf.greater(self.global_step, args.num_pretrain_steps)
-        self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u_sample(args), lambda: tf.constant(0.))
+        if args.sample_unlabel == 'False':
+            self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u(args), lambda: tf.constant(0.))
+        elif args.sample_unlabel == 'S1':
+            self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u_sample(args), lambda: tf.constant(0.))
+        else:
+            raise Exception('sampling method is not supported. {}'.format(args.sample_unlabel))
         tf.summary.scalar('train_unlabel', tf.to_int64(self.train_unlabel))
         tf.summary.scalar('loss_u', self.loss_u)
 

@@ -80,7 +80,7 @@ if __name__ == '__main__':
     inp = tf.zeros([10, 11, 3])
     label = tf.zeros([10, 11, 2])
     msk = tf.ones([10, 11])
-    y = net.forward(inp, msk, label, return_final=True)
+    y = net.forward(inp, msk, label, return_final=True, initial_state=(tf.zeros([10, 4]),tf.zeros([10,4])))
     print(type(y[0]))
 
     sess = tf.Session()

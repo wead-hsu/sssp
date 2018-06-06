@@ -3,11 +3,10 @@ import tensorflow as tf
 def create_encoder(self, inp, msk, keep_rate, scope_name, args):
     with tf.variable_scope(scope_name):
         emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-        emb_inp = tf.nn.dropout(emb_inp, keep_rate)
         
         if args.classifier_type == 'LSTM':
             with tf.variable_scope('init', initializer=tf.random_normal_initializer(0, 0.1)):
-                cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
+                cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True, cell_clip=10)
                 if args.num_layers > 1:
                     cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
                 _, enc_state = tf.nn.dynamic_rnn(cell=cell,
@@ -347,7 +346,7 @@ def create_encoder(self, inp, msk, keep_rate, scope_name, args):
                 weights = logits_att / tf.reduce_sum(logits_att, axis=1)[:, None, :]
                 return weights
     
-            cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True)
+            cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True, cell_clip=10)
             if args.num_layers > 1:
                 cell = tf.nn.rnn_cell.MultiRNNCell([cell] * args.num_layers)
             states, _ = tf.nn.dynamic_rnn(cell=cell,
