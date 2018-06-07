@@ -1,13 +1,13 @@
 #save_dir=/home/wdxu/codes/ssvae-wdxu-mod/scripts/examples/tmp/
-save_dir=data/google-extraction/proc/0.1/
+save_dir=data/google-extraction/proc/0.4
 
 CUDA_VISIBLE_DEVICES=3 python3 clf.py \
 	--model_path sssp.models.clf.basic_clf \
 	--train_path ${save_dir}/labeled.data.idx \
 	--valid_path ${save_dir}/valid.data.idx \
 	--test_path ${save_dir}/test.data.idx \
-	--save_dir results/google-extraction/clf-0.1-selfatt-maxlen200 \
-	--classifier_type "GRU+selfatt" \
+	--save_dir results/google-extraction/clf-0.4-lstm-maxlen200 \
+	--classifier_type "LSTM" \
 	--num_classes 5 \
 	--vocab_size 20000\
 	--validate_every 1000 \

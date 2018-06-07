@@ -1,7 +1,7 @@
 import tensorflow as tf
 
 class ScLSTM(object):
-    def __init__(self, inp_size, num_units, num_classes):
+    def __init__(self, inp_size, num_units, num_classes, cell_clip=None, use_peepholes=True):
         """
         Gated LSTM is LSTM equipped with gate mechanism to ignore the
         irrelevant part of input.
@@ -13,6 +13,8 @@ class ScLSTM(object):
         self.inp_size = inp_size
         self.num_units = num_units
         self.num_classes = num_classes
+        self.cell_clip = cell_clip
+        self.use_peepholes = use_peepholes
         xav_init = tf.contrib.layers.xavier_initializer
 
         # parameters
@@ -21,6 +23,11 @@ class ScLSTM(object):
         self.b = tf.get_variable('b', shape=[4 * num_units], initializer=tf.constant_initializer(0.))
 
         self.W_yc = tf.get_variable('W_yc', shape=[num_classes, num_units], initializer=xav_init())
+
+        if self.use_peepholes:
+            self._w_f_diag = tf.get_variable("w_f_diag", shape=[self.num_units], initializer=xav_init())
+            self._w_i_diag = tf.get_variable("w_i_diag", shape=[self.num_units], initializer=xav_init())
+            self._w_o_diag = tf.get_variable("w_o_diag", shape=[self.num_units], initializer=xav_init())
 
     def forward(self, inp, msk, label, initial_state=None, time_major=False, return_final=False, scope='ScLSTM'):
         """ to build the graph, run forward """
@@ -59,15 +66,30 @@ class ScLSTM(object):
     def _lstm_step(self, states, inputs):
         prev_c, prev_h = states
         x_t, y_t, m_t = inputs
-        i, f, o, g = tf.split(tf.matmul(x_t, self.U) + tf.matmul(prev_h, self.W) + self.b,
+        i, f, o, _c = tf.split(tf.matmul(x_t, self.U) + tf.matmul(prev_h, self.W) + self.b,
                 num_or_size_splits=4,
                 axis=1)
         i = tf.sigmoid(i)
         f = tf.sigmoid(f)
+        
+        if self.use_peepholes:
+            i += prev_c * self._w_i_diag
+            f += prev_c * self._w_f_diag
+
         o = tf.sigmoid(o)
-        g = tf.tanh(g)
-        c = prev_c*f + g*i + tf.tanh(tf.matmul(y_t, self.W_yc))
+        _c = tf.tanh(_c)
+        c = prev_c*f + _c*i + tf.tanh(tf.matmul(y_t, self.W_yc))
+ 
+        if self.cell_clip is not None and self.cell_clip > 0:
+            # pylint: disable=invalid-unary-operand-type
+            c = tf.clip_by_value(c, -self.cell_clip, self.cell_clip)
+            # pylint: enable=invalid-unary-operand-type
+
+        if self.use_peepholes:
+            o += c * self._w_o_diag
+
         h = tf.tanh(c) * o
+       
         # slow
         #c = m_t[:, None] * c + (1 - m_t[:, None]) * prev_c
         #h = m_t[:, None] * h + (1 - m_t[:, None]) * prev_h
@@ -76,7 +98,7 @@ class ScLSTM(object):
         return c, h
 
 if __name__ == '__main__':
-    net = ScLSTM(3, 4, 2)
+    net = ScLSTM(3, 4, 2, cell_clip=10)
     inp = tf.zeros([10, 11, 3])
     label = tf.zeros([10, 11, 2])
     msk = tf.ones([10, 11])

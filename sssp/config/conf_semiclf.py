@@ -16,15 +16,18 @@ def init_arguments(parser):
     parser.add_argument('--alpha', type=float, default=1.0, help='rescale for unlabeled clf')
     parser.add_argument('--num_pretrain_steps', type=int, default=8000, help='Number of step for pretraining')
     parser.add_argument('--use_weights', action='store_true', default=False, help='if use, multiply weights in decoder')
+    parser.add_argument('--use_binaryweights', action='store_true', default=False, help='if use, attention weights will be binarized.')
     parser.add_argument('--keep_rate', type=float, default=0.5, help='keep rate')
-    #parser.add_argument('--sample_unlabel', type=str, default='False', help='[S1, S2, False]')
+    parser.add_argument('--word_keep_rate', type=float, default=0.9, help='keep rate')
+    parser.add_argument('--decoder_type', type=str, default='lstm', help='[lstm, sclstm]')
+    parser.add_argument('--sample_unlabel', type=str, default='False', help='[S1, S2, False]')
 
     # TRAINING
     parser.add_argument('--max_epoch', type=int, default=400, help='Maximum number of epochs')
     parser.add_argument('--grad_clip', type=float, default=10.0, help='grad_clip')
     parser.add_argument('--max_norm', type=float, default=20.0, help='max_norm')
     parser.add_argument('--train_embd', type=bool, default=True, help='If train embedding')
-    parser.add_argument('--learning_rate', type=float, default=0.0001, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.0004, help='Learning rate')
     parser.add_argument('--show_every', type=int, default=100, help='Number of batch between showing the results')
     parser.add_argument('--save_every', type=int, default=2000, help='Number of batch between saving the results')
     parser.add_argument('--validate_every', type=int, default=1000, help='Number of batch between validating the results')
@@ -32,7 +35,7 @@ def init_arguments(parser):
     parser.add_argument('--decay_steps', type=float, default=100, help='decay_steps')
    
     # ENVORIMENTS
-    parser.add_argument('--max_to_keep', type=int, default=2, help='max_to_keep')
+    parser.add_argument('--max_to_keep', type=int, default=0, help='max_to_keep')
     parser.add_argument('--log_prefix', type=str, default='semiclf', help='Log prefix')
 
     # DATASET
@@ -71,11 +74,11 @@ def init_arguments(parser):
         #parser.add_argument('--test_path', type=str, default='data/ag_news/proc/test.data.idx', help='Directory of datasets')
         #parser.add_argument('--vocab_path', type=str, default='data/ag_news/proc/vocab.pkl', help='vocab_path')
         
-        parser.add_argument('--train_label_path', type=str, default='data/ag_news/proc.old/labeled.data.idx', help='Directory of datasets')
-        parser.add_argument('--train_unlabel_path', type=str, default='data/ag_news/proc.old/unlabeled.data.idx', help='Directory of datasets')
-        parser.add_argument('--valid_path', type=str, default='data/ag_news/proc.old/valid.data.idx', help='Directory of datasets')
-        parser.add_argument('--test_path', type=str, default='data/ag_news/proc.old/test.data.idx', help='Directory of datasets')
-        parser.add_argument('--vocab_path', type=str, default='data/ag_news/proc.old/vocab.pkl', help='vocab_path')
+        parser.add_argument('--train_label_path', type=str, default='data/ag_news/ag8000/labeled.data.idx', help='Directory of datasets')
+        parser.add_argument('--train_unlabel_path', type=str, default='data/ag_news/ag8000/unlabeled.data.idx', help='Directory of datasets')
+        parser.add_argument('--valid_path', type=str, default='data/ag_news/ag8000/valid.data.idx', help='Directory of datasets')
+        parser.add_argument('--test_path', type=str, default='data/ag_news/ag8000/test.data.idx', help='Directory of datasets')
+        parser.add_argument('--vocab_path', type=str, default='data/ag_news/ag8000/vocab.pkl', help='vocab_path')
         
         parser.add_argument('--save_dir', type=str, default='results/semiclf-agnews-gru-hard-changenorm-softmax-dropoutfc', help='Directory for saving')
         parser.add_argument('--klw_w', type=float, default=3e-5, help='klw = klw_w * step + klw_b')
@@ -85,8 +88,8 @@ def init_arguments(parser):
         parser.add_argument('--num_classes', type=int, default=4, help='Number of classes')
         parser.add_argument('--vocab_size', type=int, default=23829, help='Size of vocabulary')
         parser.add_argument('--max_sent_len', type=int, default=100, help='maximum sentence length')
-        #parser.add_argument('--embd_path', type=str, default='data/ag_news/proc.old/webd.pkl', help='embd_path')
-        parser.add_argument('--embd_path', type=str, default=None, help='embd_path')
+        parser.add_argument('--embd_path', type=str, default='data/ag_news/ag8000/embd.pkl', help='embd_path')
+        #parser.add_argument('--embd_path', type=str, default=None, help='embd_path')
         parser.add_argument('--embd_dim', type=int, default=300, help='Dimension of embedding matrix')
 
     #for debug

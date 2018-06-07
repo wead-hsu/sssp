@@ -5,12 +5,12 @@ CUDA_VISIBLE_DEVICES=2 python3 clf.py \
 	--train_path ${save_dir}/labeled.data.idx \
 	--valid_path ${save_dir}/valid.data.idx \
 	--test_path ${save_dir}/test.data.idx \
-	--embd_path ${save_dir}/embd.pkl \
-	--save_dir 'results/ag/clf-lstm-8k-emb-dropoutfix-useh' \
+	--save_dir 'results/ag/clf-lstm-8k-noemb' \
 	--classifier_type "LSTM" \
 	--num_classes 4 \
 	--validate_every 500 \
 	--vocab_size  23829 \
+	#--embd_path ${save_dir}/embd.pkl \
 	#--vocab_path ${save_dir}/vocab.pkl \
 	#--fix_sent_len 300 \
 	#--num_filters 300 \

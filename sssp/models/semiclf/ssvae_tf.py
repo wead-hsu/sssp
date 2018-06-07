@@ -23,8 +23,8 @@ class SemiClassifier(ModelBase):
         super(SemiClassifier, self).__init__()
         self._logger = logging.getLogger(__name__)
 
-    def _get_rnn_cell(self, rnn_type, num_units, num_layers):
-        cell = tf.contrib.rnn.LSTMCell(num_units, state_is_tuple=True)
+    def _get_rnn_cell(self, rnn_type, num_units, num_layers, cell_clip):
+        cell = tf.contrib.rnn.LSTMCell(num_units, state_is_tuple=True, cell_clip=cell_clip)
         """
         if rnn_type == 'LSTM':
             # use concated state for convinience
@@ -75,10 +75,10 @@ class SemiClassifier(ModelBase):
                 shape=[],
                 name='is_training_plh')
 
-        self.keep_prob_plh = tf.placeholder(
+        self.keep_rate_plh = tf.placeholder(
                 dtype=tf.float32,
                 shape=[], 
-                name='keep_prob_plh')
+                name='keep_rate_plh')
 
         self.beam_size_plh = tf.placeholder(
                 tf.int32,
@@ -114,9 +114,9 @@ class SemiClassifier(ModelBase):
     def _create_encoder(self, emb_inp, seqlen, scope_name, args):
         with tf.variable_scope(scope_name):
             #emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-            #emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
+            #emb_inp = tf.nn.dropout(emb_inp, self.keep_rate_plh)
 
-            cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+            cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers, args.grad_clip)
             _, enc_state = tf.nn.dynamic_rnn(
                     cell=cell,
                     inputs=emb_inp,
@@ -135,15 +135,15 @@ class SemiClassifier(ModelBase):
                 self._logger.info('Using ScLSTM as the decoder')
                 from sssp.models.layers.sclstm import ScLSTM
                 #emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-                #emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
+                #emb_inp = tf.nn.dropout(emb_inp, self.keep_rate_plh)
                 y_inp = tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])
-                sclstm_layer = ScLSTM(args.embd_dim, args.num_units, args.num_classes)
+                sclstm_layer = ScLSTM(args.embd_dim, args.num_units, args.num_classes, cell_clip=args.grad_clip)
                 _, dec_outs = sclstm_layer.forward(emb_inp, mask, y_inp, return_final=False, initial_state=(init_state, init_state))
                 cell = sclstm_layer._lstm_step
             else:
                 self._logger.info('Using LSTM as the decoder')
                 #emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
-                #emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
+                #emb_inp = tf.nn.dropout(emb_inp, self.keep_rate_plh)
                 emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
 
                 cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
@@ -175,23 +175,23 @@ class SemiClassifier(ModelBase):
 
     def _create_rnn_classifier(self, emb_inp, msk, keep_rate, scope_name, args):
         with tf.variable_scope('lstm', initializer=tf.random_normal_initializer(0, 0.1)):
-            cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True, cell_clip=10)
+            cell = tf.contrib.rnn.LSTMCell(args.num_units, state_is_tuple=True, use_peepholes=True, cell_clip=args.grad_clip)
             _, enc_state = tf.nn.dynamic_rnn(cell=cell,
-                    inputs=tf.nn.dropout(emb_inp, self.keep_rate),
+                    inputs=tf.nn.dropout(emb_inp, self.keep_rate_plh),
                     dtype=tf.float32,
-                    sequence_length=tf.to_int64(tf.reduce_sum(self.m, axis=1)))
+                    sequence_length=tf.to_int64(tf.reduce_sum(msk, axis=1)))
             enc_state = enc_state[-1]
         
-        enc_state = tf.nn.dropout(enc_state, self.keep_rate)
+        enc_state = tf.nn.dropout(enc_state, self.keep_rate_plh)
         with tf.variable_scope('fc'):
             enc_state = tf.contrib.layers.fully_connected(enc_state, 30, scope='fc0')
             #enc_state = tf.nn.tanh(enc_state)
             enc_state = tf.nn.softmax(enc_state) # add == slow
-            enc_state = tf.nn.dropout(enc_state, self.keep_rate)
+            enc_state = tf.nn.dropout(enc_state, self.keep_rate_plh)
     
             logits = tf.contrib.layers.fully_connected(
                     inputs=enc_state,
-                    num_outputs=num_classes,
+                    num_outputs=args.num_classes,
                     activation_fn=None,
                     scope='fc1')
 
@@ -262,7 +262,7 @@ class SemiClassifier(ModelBase):
                 seqlen=xlen,
                 scope_name='enc',
                 args=args)
-        enc_state = tf.nn.dropout(enc_state, self.keep_prob_plh)
+        enc_state = tf.nn.dropout(enc_state, self.keep_rate_plh)
         enc_state = tf.contrib.layers.fully_connected(enc_state, 
                 num_outputs=args.num_units,
                 activation_fn=None,
@@ -273,18 +273,18 @@ class SemiClassifier(ModelBase):
                 is_training=self.is_training_plh,
                 scope='bn_a')
         enc_state = tf.tanh(enc_state)
-        enc_state = tf.nn.dropout(enc_state, self.keep_prob_plh)
+        enc_state = tf.nn.dropout(enc_state, self.keep_rate_plh)
 
         label_oh = tf.gather(tf.eye(args.num_classes), label)
         with tf.variable_scope('latent'):
             y_enc_in = tf.contrib.layers.fully_connected(label_oh, args.num_units, tf.tanh, scope='y_enc_in')
-            y_enc_in = tf.nn.dropout(y_enc_in, self.keep_prob_plh)
+            y_enc_in = tf.nn.dropout(y_enc_in, self.keep_rate_plh)
             pst_in = tf.concat([y_enc_in, enc_state], axis=1)
             pst_in = tf.contrib.layers.fully_connected(pst_in, args.num_units, None, scope='pst_in_dense')
             pst_in = tf.contrib.layers.batch_norm(pst_in, center=True, scale=True, 
                     is_training=self.is_training_plh, scope='pst_in_bn')
             pst_in = tf.tanh(pst_in)
-            pst_in = tf.nn.dropout(pst_in, self.keep_prob_plh)
+            pst_in = tf.nn.dropout(pst_in, self.keep_rate_plh)
             mu_pst = tf.contrib.layers.fully_connected(pst_in, args.dim_z, None, 
                     scope='mu_posterior')
             logvar_pst = tf.contrib.layers.fully_connected(pst_in, args.dim_z, None,
@@ -302,12 +302,12 @@ class SemiClassifier(ModelBase):
             z = smart_cond(self.is_training_plh, lambda: z_st_pst, lambda: z_st_pri)
        
         z_ext = tf.contrib.layers.fully_connected(tf.reshape(z, [-1, args.dim_z]), args.num_units, tf.tanh, scope='extend_z')
-        z_ext = tf.nn.dropout(z_ext, self.keep_prob_plh)
+        z_ext = tf.nn.dropout(z_ext, self.keep_rate_plh)
         yz = tf.concat([z_ext, label_oh], axis=1)
         yz = tf.contrib.layers.fully_connected(yz, args.num_units, None, scope='yz_dense')
         yz = tf.contrib.layers.batch_norm(yz, center=True, scale=True, is_training=self.is_training_plh, scope='yz_bn')
         yz = tf.tanh(yz)
-        yz = tf.nn.dropout(yz, self.keep_prob_plh)
+        yz = tf.nn.dropout(yz, self.keep_rate_plh)
         #xlen = tf.to_int32(tf.reduce_sum(msk, axis=1))
         outs, proj, dec_func, cell  = self._create_decoder(
                 dec_emb,
@@ -316,7 +316,7 @@ class SemiClassifier(ModelBase):
                 init_state=yz, #tf.contrib.rnn.LSTMStateTuple(yz, yz),
                 scope_name='dec',
                 args=args)
-        outs = tf.nn.dropout(outs, self.keep_prob_plh)
+        outs = tf.nn.dropout(outs, self.keep_rate_plh)
 
         # build loss layers
         recons_loss = self._create_softmax_layer(
@@ -334,17 +334,19 @@ class SemiClassifier(ModelBase):
         random_tensor = tf.random_uniform(
                 tf.shape(emb)[:2], seed=1234567890, dtype=emb.dtype)
         random_tensor += self.word_keep_rate_plh
-        # 0. if [keep_prob, 1.0) and 1. if [1.0, 1.0 + keep_prob)
+        # 0. if [keep_rate, 1.0) and 1. if [1.0, 1.0 + keep_rate)
         binary_tensor = tf.floor(random_tensor)
-        emb = emb * binary_tensor[:, None]
+        emb = emb * binary_tensor[:, :, None]
         return emb
     
     def get_loss_l(self, args):
         with tf.variable_scope(args.log_prefix):
             """ label CVAE """
             dec_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.inp_l_plh)
+            dec_emb = tf.nn.dropout(dec_emb, self.keep_rate_plh)
             dec_emb = self.dropout_word_embedding(dec_emb)
             enc_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.tgt_l_plh)
+            enc_emb = tf.nn.dropout(enc_emb, self.keep_rate_plh)
 
             self.recons_loss_l, self.kl_loss_l = self._get_elbo_label(dec_emb, enc_emb,
                     self.tgt_l_plh,
@@ -361,7 +363,7 @@ class SemiClassifier(ModelBase):
             """ label CLASSIFICATION """
             self.logits_l, weights_l = self._create_rnn_classifier(enc_emb,
                     self.msk_l_plh,
-                    keep_rate=args.keep_rate,
+                    keep_rate=self.keep_rate_plh,
                     scope_name='clf',
                     args=args)
             self.predict_loss_l = tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -383,13 +385,15 @@ class SemiClassifier(ModelBase):
     def get_loss_u_sample(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
             dec_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.inp_u_plh)
+            dec_emb = tf.nn.dropout(dec_emb, self.keep_rate_plh)
             dec_emb = self.dropout_word_embedding(dec_emb)
             enc_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.tgt_u_plh)
+            enc_emb = tf.nn.dropout(enc_emb, self.keep_rate_plh)
 
             """ unlabel CLASSIFICATION """
             self.logits_u, weights_u = self._create_rnn_classifier(enc_emb,
                     self.msk_u_plh,
-                    keep_rate=args.keep_rate,
+                    keep_rate=self.keep_rate_plh,
                     scope_name='clf',
                     args=args)
             self.predict_u = tf.nn.softmax(self.logits_u)
@@ -433,15 +437,17 @@ class SemiClassifier(ModelBase):
         self._logger.info('Reweighting approach is not valid without sampling')
         with tf.variable_scope(args.log_prefix, reuse=True):
             dec_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.inp_u_plh)
+            dec_emb = tf.nn.dropout(dec_emb, self.keep_rate_plh)
             dec_emb = self.dropout_word_embedding(dec_emb)
             enc_emb = tf.nn.embedding_lookup(self.embedding_matrix, self.tgt_u_plh)
+            enc_emb = tf.nn.dropout(enc_emb, self.keep_rate_plh)
 
             """ unlabel CVAE """
             self.recons_loss_u, self.kl_loss_u, self.loss_sum_u = [], [], []
             for idx in range(args.num_classes):
                 label_i = tf.constant(idx)
                 label_i = tf.tile([idx], [tf.shape(self.tgt_u_plh)[0]])
-                recons_loss_ui, kl_loss_ui = self._get_elbo_label(dec_emb, dec_emb,
+                recons_loss_ui, kl_loss_ui = self._get_elbo_label(dec_emb, enc_emb,
                         self.tgt_u_plh,
                         self.msk_u_plh,
                         label_i, 
@@ -453,7 +459,7 @@ class SemiClassifier(ModelBase):
             """ unlabel CLASSIFICATION """
             self.logits_u, self.weights_u = self._create_rnn_classifier(enc_emb, 
                     self.msk_u_plh,
-                    keep_rate=args.keep_rate,
+                    keep_rate=self.keep_rate_plh,
                     scope_name='clf',
                     args=args)
             self.predict_u = tf.nn.softmax(self.logits_u)
@@ -489,7 +495,7 @@ class SemiClassifier(ModelBase):
         tf.summary.scalar('train_unlabel', tf.to_int64(self.train_unlabel))
         tf.summary.scalar('loss_u', self.loss_u)
         
-        batchsize_l, batchsize_u = tf.shape(self.inp_l_plh)[0], tf.shape(self.inp_u_plh)[0]
+        batchsize_l, batchsize_u = tf.to_float(tf.shape(self.inp_l_plh)[0]), tf.to_float(tf.shape(self.inp_u_plh)[0])
         self.loss = (self.loss_l * batchsize_l + self.loss_u * batchsize_u) / (batchsize_l + batchsize_u)
         tf.summary.scalar('loss', self.loss)
 
@@ -549,7 +555,7 @@ class SemiClassifier(ModelBase):
                     ['klw', self.kl_w]]
 
             feed_dict = dict(list(zip(plhs, inps)) + [[self.is_training_plh, True], 
-                [self.keep_prob_plh, args.keep_rate],
+                [self.keep_rate_plh, args.keep_rate],
                 [self.word_keep_rate_plh, args.word_keep_rate]])
             fetch = [self.merged] + [t[1] for t in fetch_dict] + [self.train_op]
             res = sess.run(fetch, feed_dict)
@@ -559,7 +565,7 @@ class SemiClassifier(ModelBase):
             fetch_dict = [['pred_l', self.predict_loss_l],
                     ['acc_l', self.accuracy_l],]
             feed_dict = dict(list(zip(plhs, inps+inps[:-1])) + [[self.is_training_plh, False], 
-                [self.keep_prob_plh, 1.0],
+                [self.keep_rate_plh, 1.0],
                 [self.word_keep_rate_plh, 1.0]])
             fetch = [self.merged] + [t[1] for t in fetch_dict]
             res = sess.run(fetch, feed_dict)
