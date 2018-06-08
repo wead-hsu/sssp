@@ -23,10 +23,10 @@ class SemiClassifier(ModelBase):
         super(SemiClassifier, self).__init__()
         self._logger = logging.getLogger(__name__)
 
-    def _get_rnn_cell(self, rnn_type, num_units, num_layers):
+    def _get_rnn_cell(self, rnn_type, num_units, num_layers, cell_clip):
         if rnn_type == 'LSTM':
             # use concated state for convinience
-            cell = tf.contrib.rnn.LSTMCell(num_units, state_is_tuple=True, cell_clip=10)
+            cell = tf.contrib.rnn.LSTMCell(num_units, state_is_tuple=True, cell_clip=cell_clip)
         elif rnn_type == 'GRU':
             cell = tf.contrib.rnn.GRUCell(num_units)
         else:
@@ -108,7 +108,7 @@ class SemiClassifier(ModelBase):
             emb_inp = tf.nn.embedding_lookup(self.embedding_matrix, inp)
             emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
 
-            cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+            cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers, args.grad_clip)
             _, enc_state = tf.nn.dynamic_rnn(
                     cell=cell,
                     inputs=emb_inp,
@@ -138,7 +138,7 @@ class SemiClassifier(ModelBase):
                 emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
                 emb_inp = tf.nn.dropout(emb_inp, self.keep_prob_plh)
 
-                cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+                cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers, args.grad_clip)
 
                 dec_outs, _ = tf.nn.dynamic_rnn(
                         cell=cell,
@@ -393,7 +393,7 @@ class SemiClassifier(ModelBase):
             surrogate_loss = y_st.loss(routing_loss)
             self.entropy_u = tf.losses.softmax_cross_entropy(self.predict_u, self.predict_u)
 
-        return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(loss_u_of_gen) + self.entropy_u
+        return tf.reduce_mean(surrogate_loss) + tf.reduce_mean(loss_u_of_gen) - self.entropy_u
     
     def get_loss_u(self, args):
         self._logger.info('Reweighting approach is not valid without sampling')
