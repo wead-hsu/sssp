@@ -146,7 +146,7 @@ class SemiClassifier(ModelBase):
                 #emb_inp = tf.nn.dropout(emb_inp, self.keep_rate_plh)
                 emb_inp = tf.concat([emb_inp, tf.tile(label_oh[:, None, :], [1, tf.shape(emb_inp)[1], 1])], axis=2)
 
-                cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers)
+                cell = self._get_rnn_cell(args.rnn_type, args.num_units, args.num_layers, args.grad_clip)
 
                 dec_outs, _ = tf.nn.dynamic_rnn(
                         cell=cell,
@@ -184,9 +184,10 @@ class SemiClassifier(ModelBase):
         
         enc_state = tf.nn.dropout(enc_state, self.keep_rate_plh)
         with tf.variable_scope('fc'):
-            enc_state = tf.contrib.layers.fully_connected(enc_state, 30, scope='fc0')
-            #enc_state = tf.nn.tanh(enc_state)
-            enc_state = tf.nn.softmax(enc_state) # add == slow
+            enc_state = tf.contrib.layers.fully_connected(enc_state, args.num_units, scope='fc0')
+            enc_state = tf.contrib.layers.batch_norm(enc_state, center=True, scale=True, is_training=self.is_training_plh)
+            enc_state = tf.nn.tanh(enc_state)
+            #enc_state = tf.nn.softmax(enc_state) # add == slow
             enc_state = tf.nn.dropout(enc_state, self.keep_rate_plh)
     
             logits = tf.contrib.layers.fully_connected(
@@ -372,7 +373,7 @@ class SemiClassifier(ModelBase):
             self.predict_loss_l = tf.reduce_mean(self.predict_loss_l)
             self.accuracy_l = tf.equal(tf.cast(self.label_plh, tf.int64), tf.argmax(self.logits_l, axis=1))
             self.accuracy_l = tf.reduce_mean(tf.cast(self.accuracy_l, tf.float32))
-            self.loss_l = self.elbo_loss_l + self.predict_loss_l * args.alpha
+            #self.loss_l = self.elbo_loss_l + self.predict_loss_l * args.alpha
 
             tf.summary.scalar('elbo_loss_l', self.elbo_loss_l)
             tf.summary.scalar('kl_w', self.kl_w)
@@ -380,7 +381,7 @@ class SemiClassifier(ModelBase):
             tf.summary.scalar('kl_loss_l', self.kl_loss_l)
             tf.summary.scalar('pred_loss_l', self.predict_loss_l)
             tf.summary.scalar('accuracy_l', self.accuracy_l)
-        return self.loss_l
+        return self.elbo_loss_l, self.predict_loss_l
     
     def get_loss_u_sample(self, args):
         with tf.variable_scope(args.log_prefix, reuse=True):
@@ -467,14 +468,15 @@ class SemiClassifier(ModelBase):
 
             self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
             self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)
-        return self.loss_sum_u + self.entropy_u
+        #return self.loss_sum_u - self.entropy_u
+        return self.loss_sum_u - self.entropy_u
 
     def _create_klw(self, args):
-        kl_w = tf.log(1. + tf.exp((self.global_step - args.klw_b) * args.klw_w))
+        kl_w = 1. / (1. + tf.exp(-(self.global_step - args.klw_b) * args.klw_w))
         #kl_w = tf.minimum(kl_w, 1.) / 100.0 #scale reweighted
         # 0 if it is less than 3200 batches
         kl_w_mask = tf.to_float(tf.greater(self.global_step, 3200))
-        self.kl_w =  kl_w_mask * kl_w * (1 - kl_w_mask) * 0
+        self.kl_w =  kl_w_mask * kl_w + (1 - kl_w_mask) * 0
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
@@ -484,7 +486,7 @@ class SemiClassifier(ModelBase):
             self._create_embedding_matrix(args)
             self._create_klw(args)
 
-        self.loss_l = self.get_loss_l(args)
+        self.loss_l, self.loss_c = self.get_loss_l(args)
         self.train_unlabel = tf.greater(self.global_step, args.num_pretrain_steps)
         if args.sample_unlabel == 'False':
             self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u(args), lambda: tf.constant(0.))
@@ -492,11 +494,13 @@ class SemiClassifier(ModelBase):
             self.loss_u = smart_cond(self.train_unlabel, lambda: self.get_loss_u_sample(args), lambda: tf.constant(0.))
         else:
             raise Exception('sampling method is not supported. {}'.format(args.sample_unlabel))
+
         tf.summary.scalar('train_unlabel', tf.to_int64(self.train_unlabel))
         tf.summary.scalar('loss_u', self.loss_u)
         
         batchsize_l, batchsize_u = tf.to_float(tf.shape(self.inp_l_plh)[0]), tf.to_float(tf.shape(self.inp_u_plh)[0])
         self.loss = (self.loss_l * batchsize_l + self.loss_u * batchsize_u) / (batchsize_l + batchsize_u)
+        self.loss += self.loss_c * (batchsize_l + batchsize_u) * args.alpha
         tf.summary.scalar('loss', self.loss)
 
         with tf.variable_scope(args.log_prefix):

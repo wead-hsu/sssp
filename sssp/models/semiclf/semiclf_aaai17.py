@@ -26,7 +26,7 @@ class SemiClassifier(ModelBase):
     def _get_rnn_cell(self, rnn_type, num_units, num_layers):
         if rnn_type == 'LSTM':
             # use concated state for convinience
-            cell = tf.contrib.rnn.LSTMCell(num_units, state_is_tuple=True)
+            cell = tf.contrib.rnn.LSTMCell(num_units, state_is_tuple=True, cell_clip=10)
         elif rnn_type == 'GRU':
             cell = tf.contrib.rnn.GRUCell(num_units)
         else:
@@ -423,7 +423,8 @@ class SemiClassifier(ModelBase):
 
             self.loss_sum_u = tf.add_n([self.loss_sum_u[idx] * self.predict_u[:, idx] for idx in range(args.num_classes)]) # [bs]
             self.loss_sum_u = tf.reduce_mean(self.loss_sum_u)
-        return self.loss_sum_u + self.entropy_u
+        #return self.loss_sum_u + self.entropy_u
+        return self.loss_sum_u - self.entropy_u
 
     def model_setup(self, args):
         with tf.variable_scope(args.log_prefix):
@@ -433,7 +434,7 @@ class SemiClassifier(ModelBase):
             self._create_embedding_matrix(args)
 
             self.kl_w = tf.log(1. + tf.exp((self.global_step - args.klw_b) * args.klw_w))
-            self.kl_w = tf.minimum(self.kl_w, 1.) / 100.0 #scale reweighted
+            #self.kl_w = tf.minimum(self.kl_w, 1.) / 100.0 #scale reweighted
         
         self.loss_l = self.get_loss_l(args)
         self.train_unlabel = tf.greater(self.global_step, args.num_pretrain_steps)

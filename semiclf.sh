@@ -1,7 +1,7 @@
 save_dir='data/agnews/ag8000'
 
-CUDA_VISIBLE_DEVICES=2 python3 semiclf.py \
-	--model_path sssp.models.semiclf.test_yesterday \
+CUDA_VISIBLE_DEVICES=1 python3 semiclf.py \
+	--model_path sssp.models.semiclf.semiclf_aaai17 \
 	--classifier_type 'LSTM' \
 	--train_label_path ${save_dir}/labeled.data.idx \
 	--train_unlabel_path ${save_dir}/unlabeled.data.idx \
@@ -9,7 +9,7 @@ CUDA_VISIBLE_DEVICES=2 python3 semiclf.py \
 	--test_path ${save_dir}/test.data.idx \
 	--vocab_path ${save_dir}/vocab.pkl \
 	--embd_path ${save_dir}/embd.pkl \
-	--save_dir 'results/ag/semiclf-ag8k-lstm-nosample-emb-dropoutfix-cellclipeverywhere' \
+	--save_dir 'results/ag/semiclf-ag8k-lstm-nosample-emb-dropoutfix-cellclipeverywhere-nodivideklw' \
 	--num_classes 4 \
 	--num_pretrain_steps 0000 \
 	--vocab_size 23829 \

@@ -18,7 +18,7 @@ def init_arguments(parser):
     parser.add_argument('--use_weights', action='store_true', default=False, help='if use, multiply weights in decoder')
     parser.add_argument('--use_binaryweights', action='store_true', default=False, help='if use, attention weights will be binarized.')
     parser.add_argument('--keep_rate', type=float, default=0.5, help='keep rate')
-    parser.add_argument('--word_keep_rate', type=float, default=0.9, help='keep rate')
+    parser.add_argument('--word_keep_rate', type=float, default=0.5, help='keep rate')
     parser.add_argument('--decoder_type', type=str, default='lstm', help='[lstm, sclstm]')
     parser.add_argument('--sample_unlabel', type=str, default='False', help='[S1, S2, False]')
 
